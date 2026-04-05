@@ -2,20 +2,21 @@
 
 ## 현재 기본 방향
 - CI 기본 도구는 `GitHub Actions`
-- 프런트 배포 후보는 `Vercel`
-- 백엔드 배포 후보는 `{{BACKEND_HOSTING}}`
+- 프런트 배포 기본안은 `Vercel`
+- 백엔드 배포 기본안은 `Render`
 - 자동화 목표는 높은 수준이지만, 검증 가능한 범위부터 단계적으로 확장한다.
+- 현재 기준은 1인 개발이며, release gate는 간단하게 유지하되 production 반영은 수동 승인으로 둔다.
 
 ## 권장 기본 전략
 - Pull Request:
   - lint, test, typecheck, build를 우선 수행
-  - 가능하면 preview 배포를 생성
+  - frontend preview 배포를 생성한다
   - PR 본문에 변경 범위, 검증 결과, 남은 위험을 남긴다
 - main merge:
   - 재실행 가능한 CI 검증
-  - 필요 시 preview 또는 staging 승격
+  - staging 없이 preview 검증 결과를 바탕으로 production 반영 여부를 판단한다
 - production:
-  - 태그 또는 명시적 승인 기반 배포 권장
+  - 명시적 수동 승인 기반 배포를 기본으로 한다
 
 ## 권장 파이프라인 단계
 1. 설치 및 캐시 복원
@@ -27,11 +28,11 @@
 
 ## 프런트엔드 권장안
 - 호스팅: Vercel
-- Preview: PR 단위 preview 권장
-- Production: main 또는 release tag 기반 정책 중 하나 선택
+- Preview: PR 단위 preview 사용
+- Production: main 기준 수동 승인 배포
 
 ## 백엔드 권장안
-- 호스팅 후보: Render 또는 Railway
+- 호스팅: Render
 - 배포 단위: FastAPI 앱 + PostgreSQL 연결
 - 검증: 헬스체크 엔드포인트, 기본 smoke test, 로그 확인
 
@@ -52,8 +53,6 @@
 - 자동화가 있더라도 결과 해석과 승인 포인트는 사용자와 다시 확인한다.
 
 ## TODO(USER)
-- `{{BACKEND_HOSTING}}` 확정
-- Preview 환경 운영 범위 확정
-- staging 필요 여부 확정
-- production 승인 방식 확정
+- Render free/paid 플랜과 운영 예산 기준 확정
+- backend preview를 별도로 둘지 확정
 - 시크릿 관리 방식 확정

@@ -55,9 +55,11 @@
 - 지금 바로 개발할 최소 범위가 정리됐는가
 - 테스트 가능한 성공 조건이 있는가
 - 화면/UX 관련 미확정이 치명적이지 않은가
+- `FEATURE_SPEC`과 `IMPLEMENTATION_HANDOFF`로 넘길 재료가 있는가
 
 ## Codex에 말할 수 있는 예시
-- `product-planning skill로 기획 1단계인 문제 정의만 진행해`
-- `product-planning skill로 이전 기획을 이어서 사용 사례 단계만 정리해`
-- `product-planning skill로 화면 구조와 UX 우선순위만 이번 회차에서 확정해`
-- `product-planning skill로 개발 전달용 user story와 acceptance criteria까지 정리해`
+- `기획 1단계인 문제 정의만 진행하자`
+- `이전 기획을 이어서 사용 사례 단계만 정리하자`
+- `화면 구조와 UX 우선순위만 이번 회차에서 확정하자`
+- `개발 전달용 user story와 acceptance criteria까지 정리하자`
+- `이 기획 내용을 개발 가능한 기능 명세로 정리하자`

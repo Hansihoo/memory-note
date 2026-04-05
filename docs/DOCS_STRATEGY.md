@@ -15,6 +15,9 @@
 - `PROJECT_PROFILE`: 현재 프로젝트의 확정값, 기본값, placeholder
 - `QUESTIONNAIRE`: 미확정 항목을 채우기 위한 질문
 - `PLANNING_STAGES`: 기획을 여러 회차로 나누어 진행하는 방법
+- `FEATURE_SPEC_TEMPLATE`: 기획 결과를 기능 명세로 정리하는 방법
+- `IMPLEMENTATION_HANDOFF_TEMPLATE`: 개발 시작 전에 읽는 전달 문서
+- `DEVELOPMENT_CHECKLIST`: 개발 회차에서 확인해야 하는 항목
 - `DELIVERY_LOOP`: 개발을 작은 반복 단위로 진행하는 방법
 - `WORKFLOWS`: 업무 종류별 표준 흐름
 - `COMMANDS`: Codex에 바로 말할 명령과 이어서 진행할 프롬프트
@@ -44,6 +47,9 @@ Diataxis 관점에서 이 템플릿의 문서를 아래처럼 분리한다.
   - 새 프로젝트 시작 순서를 익히게 한다.
 - How-to 성격:
   - `PLANNING_STAGES`
+  - `FEATURE_SPEC_TEMPLATE`
+  - `IMPLEMENTATION_HANDOFF_TEMPLATE`
+  - `DEVELOPMENT_CHECKLIST`
   - `DELIVERY_LOOP`
   - `WORKFLOWS`
   - 특정 작업을 어떻게 진행할지 단계로 안내한다.
@@ -62,6 +68,8 @@ Diataxis 관점에서 이 템플릿의 문서를 아래처럼 분리한다.
 - 각 회차 문서에는 반드시 `이번 회차 결정`, `남은 질문`, `다음 회차 시작점`이 있어야 한다.
 - 기획 문서는 사용자 가치와 사용 사례에서 출발하고, 구현 세부로 바로 뛰지 않는다.
 - 개발 문서는 구현 내역뿐 아니라 검증 명령과 로그 확인 결과를 함께 남긴다.
+- 사용자에게 보이는 문구는 내부 용어보다 쉬운 한국어를 우선 사용한다.
+- 개발자는 기획 문서만이 아니라 기능 명세와 개발 전달 문서를 보고 작업을 시작할 수 있어야 한다.
 
 ## GitHub 템플릿 연계 원칙
 - 반복되는 협업 입력은 `.github/ISSUE_TEMPLATE`로 구조화한다.
