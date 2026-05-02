@@ -1,0 +1,39 @@
+{
+  "name": "memory-assistant",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Markdown wordbook based memorization assistant.",
+  "scripts": {
+    "dev": "concurrently -n api,web \"pnpm run api:dev\" \"pnpm run web:dev\"",
+    "web:dev": "pnpm -C apps/web dev",
+    "api:dev": "python -m uvicorn app.main:app --reload --app-dir apps/api",
+    "build": "pnpm run web:build",
+    "web:build": "pnpm -C apps/web build",
+    "test": "pnpm run test:unit && pnpm run test:integration",
+    "test:unit": "pnpm run web:test:unit && pnpm run api:test",
+    "test:integration": "pnpm run api:test",
+    "test:e2e": "pnpm -C apps/web test:e2e",
+    "web:test:unit": "pnpm -C apps/web test:unit",
+    "lint": "pnpm run web:lint && pnpm run api:lint",
+    "web:lint": "pnpm -C apps/web lint",
+    "api:lint": "python -m ruff check apps/api",
+    "format": "pnpm run web:format && pnpm run api:format",
+    "web:format": "pnpm -C apps/web format",
+    "api:format": "python -m ruff format apps/api",
+    "typecheck": "pnpm run web:typecheck && pnpm run api:typecheck",
+    "web:typecheck": "pnpm -C apps/web typecheck",
+    "api:typecheck": "python -m mypy apps/api/app",
+    "api:test": "python -m pytest apps/api/tests",
+    "api:install": "python -m pip install -r apps/api/requirements.txt",
+    "logs": "echo API logs are printed by the running api:dev process. Use logs:debug to enable scoped debug flags.",
+    "logs:debug": "echo Set LOG_LEVEL=debug and feature flags such as DEBUG_IMPORT=true, DEBUG_SESSION=true, DEBUG_PROGRESS=true, DEBUG_AUTH=true before running dev.",
+    "logs:off": "echo Default logging is warn-level with feature debug flags disabled.",
+    "diagnose": "pnpm run lint && pnpm run typecheck && pnpm run test",
+    "ci": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "release:check": "pnpm run ci && pnpm run test:e2e"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

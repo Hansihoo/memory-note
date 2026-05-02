@@ -1,0 +1,1 @@
+"""Memory assistant FastAPI backend."""
