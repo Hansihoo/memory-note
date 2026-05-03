@@ -387,6 +387,15 @@ textarea:focus {
   font-size: clamp(34px, 5.2vw, 68px);
 }
 
+.memory-card strong.compact-study-text {
+  font-size: clamp(21px, 3.25vw, 41px);
+  line-height: 1.18;
+}
+
+.notebook-answer strong.compact-study-text {
+  font-size: clamp(17px, 2.6vw, 34px);
+}
+
 .empty-notebook {
   display: grid;
   align-content: center;

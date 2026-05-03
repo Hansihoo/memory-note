@@ -10,15 +10,218 @@ const DRAFT_ROW_COUNT = 1;
 const BLANK_SHEET_ROW_COUNT = 18;
 const DEMO_USERNAME_KEY = "memory-assistant-demo-username";
 const DEMO_PASSWORD = "password123";
+const COMPACT_STUDY_TEXT_LENGTH = 15;
+const SAMPLE_WORDBOOK_NAME = "해외 여행 필수 영단어";
+const SAMPLE_SENTENCE_WORDBOOK_NAME = "해외여행 필수 영어문장";
+const LEGACY_SAMPLE_WORDBOOK_NAME = "기본 영어 단어장";
 
 const sampleWords = [
-  { key: "apple", value: "사과" },
-  { key: "book", value: "책" },
-  { key: "study", value: "공부하다" },
-  { key: "remember", value: "기억하다" },
-  { key: "listen", value: "듣다" },
-  { key: "answer", value: "대답" }
+  { key: "airport", value: "공항" },
+  { key: "passport", value: "여권" },
+  { key: "boarding pass", value: "탑승권" },
+  { key: "ticket", value: "표" },
+  { key: "flight", value: "항공편" },
+  { key: "gate", value: "탑승구" },
+  { key: "terminal", value: "터미널" },
+  { key: "luggage", value: "짐" },
+  { key: "baggage", value: "수하물" },
+  { key: "carry-on", value: "기내 수하물" },
+  { key: "suitcase", value: "여행가방" },
+  { key: "backpack", value: "배낭" },
+  { key: "security", value: "보안 검색" },
+  { key: "customs", value: "세관" },
+  { key: "immigration", value: "입국 심사" },
+  { key: "visa", value: "비자" },
+  { key: "arrival", value: "도착" },
+  { key: "departure", value: "출발" },
+  { key: "delay", value: "지연" },
+  { key: "cancelled", value: "취소된" },
+  { key: "transfer", value: "환승" },
+  { key: "connection", value: "연결편" },
+  { key: "baggage claim", value: "수하물 찾는 곳" },
+  { key: "currency", value: "통화" },
+  { key: "exchange", value: "환전" },
+  { key: "cash", value: "현금" },
+  { key: "credit card", value: "신용카드" },
+  { key: "receipt", value: "영수증" },
+  { key: "price", value: "가격" },
+  { key: "discount", value: "할인" },
+  { key: "tip", value: "팁" },
+  { key: "taxi", value: "택시" },
+  { key: "bus", value: "버스" },
+  { key: "train", value: "기차" },
+  { key: "subway", value: "지하철" },
+  { key: "platform", value: "승강장" },
+  { key: "station", value: "역" },
+  { key: "ticket machine", value: "발권기" },
+  { key: "map", value: "지도" },
+  { key: "directions", value: "길 안내" },
+  { key: "address", value: "주소" },
+  { key: "hotel", value: "호텔" },
+  { key: "hostel", value: "호스텔" },
+  { key: "reservation", value: "예약" },
+  { key: "check-in", value: "체크인" },
+  { key: "check-out", value: "체크아웃" },
+  { key: "room", value: "방" },
+  { key: "key", value: "열쇠" },
+  { key: "card key", value: "카드키" },
+  { key: "elevator", value: "엘리베이터" },
+  { key: "lobby", value: "로비" },
+  { key: "reception", value: "프런트" },
+  { key: "towel", value: "수건" },
+  { key: "blanket", value: "담요" },
+  { key: "pillow", value: "베개" },
+  { key: "shower", value: "샤워" },
+  { key: "toilet", value: "화장실" },
+  { key: "soap", value: "비누" },
+  { key: "shampoo", value: "샴푸" },
+  { key: "water", value: "물" },
+  { key: "food", value: "음식" },
+  { key: "menu", value: "메뉴" },
+  { key: "bill", value: "계산서" },
+  { key: "breakfast", value: "아침 식사" },
+  { key: "lunch", value: "점심 식사" },
+  { key: "dinner", value: "저녁 식사" },
+  { key: "snack", value: "간식" },
+  { key: "vegetarian", value: "채식주의자" },
+  { key: "allergy", value: "알레르기" },
+  { key: "pharmacy", value: "약국" },
+  { key: "medicine", value: "약" },
+  { key: "hospital", value: "병원" },
+  { key: "doctor", value: "의사" },
+  { key: "emergency", value: "응급 상황" },
+  { key: "police", value: "경찰" },
+  { key: "lost", value: "잃어버린" },
+  { key: "found", value: "발견된" },
+  { key: "help", value: "도움" },
+  { key: "entrance", value: "입구" },
+  { key: "exit", value: "출구" },
+  { key: "open", value: "열려 있는" },
+  { key: "closed", value: "닫힌" },
+  { key: "today", value: "오늘" },
+  { key: "tomorrow", value: "내일" },
+  { key: "yesterday", value: "어제" },
+  { key: "morning", value: "아침" },
+  { key: "afternoon", value: "오후" },
+  { key: "evening", value: "저녁" },
+  { key: "night", value: "밤" },
+  { key: "right", value: "오른쪽" },
+  { key: "left", value: "왼쪽" },
+  { key: "straight", value: "직진" },
+  { key: "near", value: "가까운" },
+  { key: "far", value: "먼" },
+  { key: "Wi-Fi", value: "와이파이" },
+  { key: "password", value: "비밀번호" },
+  { key: "charger", value: "충전기" },
+  { key: "adapter", value: "어댑터" },
+  { key: "restroom", value: "화장실" },
+  { key: "information", value: "안내소 / 정보" }
 ];
+
+const sampleSentences = [
+  { key: "Could you tell me where the check-in counter is?", value: "체크인 카운터가 어디인지 알려주실 수 있나요?" },
+  { key: "I’d like to check in for my flight.", value: "항공편 체크인을 하고 싶습니다." },
+  { key: "Can I choose an aisle seat?", value: "통로 쪽 좌석을 선택할 수 있나요?" },
+  { key: "Can I choose a window seat?", value: "창가 좌석을 선택할 수 있나요?" },
+  { key: "Is there any extra charge for this seat?", value: "이 좌석은 추가 요금이 있나요?" },
+  { key: "My luggage is over the weight limit.", value: "제 짐이 무게 제한을 초과했습니다." },
+  { key: "How much is the excess baggage fee?", value: "초과 수하물 요금이 얼마인가요?" },
+  { key: "Can I carry this on board?", value: "이것을 기내에 가지고 탈 수 있나요?" },
+  { key: "Where should I go for security screening?", value: "보안 검색은 어디로 가야 하나요?" },
+  { key: "Could you help me find my boarding gate?", value: "탑승구 찾는 것을 도와주실 수 있나요?" },
+  { key: "Has boarding started yet?", value: "탑승이 이미 시작되었나요?" },
+  { key: "Has the gate changed?", value: "탑승구가 변경되었나요?" },
+  { key: "How long is the flight delayed?", value: "항공편이 얼마나 지연되나요?" },
+  { key: "What should I do if my flight is cancelled?", value: "항공편이 취소되면 어떻게 해야 하나요?" },
+  { key: "I have a connecting flight.", value: "저는 환승 항공편이 있습니다." },
+  { key: "Will I have enough time to transfer?", value: "환승할 시간이 충분할까요?" },
+  { key: "Do I need to pick up my luggage here?", value: "여기서 짐을 찾아야 하나요?" },
+  { key: "My baggage has not arrived.", value: "제 수하물이 도착하지 않았습니다." },
+  { key: "I’d like to report missing luggage.", value: "분실 수하물을 신고하고 싶습니다." },
+  { key: "This suitcase looks damaged.", value: "이 여행가방이 파손된 것 같습니다." },
+  { key: "I’m here for tourism.", value: "관광 목적으로 왔습니다." },
+  { key: "I’ll be staying for seven days.", value: "7일 동안 머물 예정입니다." },
+  { key: "I’m staying at this hotel.", value: "이 호텔에 머물고 있습니다." },
+  { key: "Here is my hotel reservation.", value: "여기 제 호텔 예약 확인서입니다." },
+  { key: "I have a return ticket.", value: "돌아가는 항공권이 있습니다." },
+  { key: "I don’t have anything to declare.", value: "신고할 물품이 없습니다." },
+  { key: "This is for personal use.", value: "이것은 개인용입니다." },
+  { key: "Could you repeat the question?", value: "질문을 다시 말씀해 주실 수 있나요?" },
+  { key: "Could you write that down for me?", value: "그것을 적어 주실 수 있나요?" },
+  { key: "I’m not sure what this form means.", value: "이 양식의 의미를 잘 모르겠습니다." },
+  { key: "I have a reservation under the name Kim.", value: "Kim이라는 이름으로 예약했습니다." },
+  { key: "Could you check my reservation?", value: "제 예약을 확인해 주실 수 있나요?" },
+  { key: "Is breakfast included?", value: "조식이 포함되어 있나요?" },
+  { key: "Is there a deposit required?", value: "보증금이 필요한가요?" },
+  { key: "Can I check in early?", value: "일찍 체크인할 수 있나요?" },
+  { key: "Can I check out late?", value: "늦게 체크아웃할 수 있나요?" },
+  { key: "Could you keep my luggage until tonight?", value: "오늘 밤까지 짐을 맡아 주실 수 있나요?" },
+  { key: "My room key isn’t working.", value: "제 방 키가 작동하지 않습니다." },
+  { key: "The air conditioner doesn’t seem to work.", value: "에어컨이 작동하지 않는 것 같습니다." },
+  { key: "There is no hot water in the room.", value: "방에 따뜻한 물이 나오지 않습니다." },
+  { key: "The room hasn’t been cleaned yet.", value: "방이 아직 청소되지 않았습니다." },
+  { key: "Could I change to another room?", value: "다른 방으로 바꿀 수 있을까요?" },
+  { key: "The room is noisier than I expected.", value: "방이 생각보다 시끄럽습니다." },
+  { key: "Could you send someone to fix it?", value: "수리할 사람을 보내 주실 수 있나요?" },
+  { key: "What time does breakfast start?", value: "조식은 몇 시에 시작하나요?" },
+  { key: "What time does the front desk close?", value: "프런트 데스크는 몇 시에 닫나요?" },
+  { key: "Is there a laundry room in the hotel?", value: "호텔에 세탁실이 있나요?" },
+  { key: "Could you call a taxi for me?", value: "택시를 불러 주실 수 있나요?" },
+  { key: "What is the best way to get downtown?", value: "시내로 가는 가장 좋은 방법은 무엇인가요?" },
+  { key: "Which line should I take?", value: "어느 노선을 타야 하나요?" },
+  { key: "Where should I transfer?", value: "어디에서 갈아타야 하나요?" },
+  { key: "How many stops is it from here?", value: "여기서 몇 정거장인가요?" },
+  { key: "Does this train go to the airport?", value: "이 기차가 공항으로 가나요?" },
+  { key: "Is this bus going in the right direction?", value: "이 버스가 맞는 방향으로 가고 있나요?" },
+  { key: "Could you let me know when to get off?", value: "언제 내려야 하는지 알려주실 수 있나요?" },
+  { key: "How often does this bus run?", value: "이 버스는 얼마나 자주 오나요?" },
+  { key: "Where can I buy a transportation card?", value: "교통카드는 어디서 살 수 있나요?" },
+  { key: "Can I top up this card here?", value: "여기서 이 카드를 충전할 수 있나요?" },
+  { key: "I think I took the wrong train.", value: "제가 기차를 잘못 탄 것 같습니다." },
+  { key: "Could you show me on the map?", value: "지도에서 보여주실 수 있나요?" },
+  { key: "I’d like a table for two, if available.", value: "가능하면 두 명 자리를 부탁드립니다." },
+  { key: "Do I need a reservation?", value: "예약이 필요한가요?" },
+  { key: "How long is the wait?", value: "대기 시간이 얼마나 되나요?" },
+  { key: "Could we sit by the window?", value: "창가 자리에 앉을 수 있을까요?" },
+  { key: "What is the most popular dish here?", value: "여기서 가장 인기 있는 음식은 무엇인가요?" },
+  { key: "Could you recommend something local?", value: "현지 음식을 추천해 주실 수 있나요?" },
+  { key: "Does this contain seafood?", value: "이 음식에 해산물이 들어가나요?" },
+  { key: "I’m allergic to nuts.", value: "저는 견과류 알레르기가 있습니다." },
+  { key: "Could you make it less spicy?", value: "덜 맵게 해주실 수 있나요?" },
+  { key: "Could you serve the sauce separately?", value: "소스를 따로 주실 수 있나요?" },
+  { key: "I think this is not what I ordered.", value: "제가 주문한 것이 아닌 것 같습니다." },
+  { key: "We haven’t received our order yet.", value: "저희 주문이 아직 나오지 않았습니다." },
+  { key: "Could I have the bill, please?", value: "계산서를 받을 수 있을까요?" },
+  { key: "Is service charge included?", value: "서비스 요금이 포함되어 있나요?" },
+  { key: "Can we pay separately?", value: "따로 계산할 수 있나요?" },
+  { key: "Could you pack this to go?", value: "이것을 포장해 주실 수 있나요?" },
+  { key: "I’m looking for something under 30 dollars.", value: "30달러 이하의 물건을 찾고 있습니다." },
+  { key: "Do you have a smaller size?", value: "더 작은 사이즈가 있나요?" },
+  { key: "Do you have a larger size?", value: "더 큰 사이즈가 있나요?" },
+  { key: "Can I return this if it doesn’t fit?", value: "사이즈가 안 맞으면 반품할 수 있나요?" },
+  { key: "What is your return policy?", value: "반품 규정이 어떻게 되나요?" },
+  { key: "Is this price final?", value: "이 가격이 최종 가격인가요?" },
+  { key: "Could you give me a better price?", value: "조금 더 좋은 가격으로 해주실 수 있나요?" },
+  { key: "I’ll think about it and come back later.", value: "생각해 보고 나중에 다시 오겠습니다." },
+  { key: "Could you show me another one?", value: "다른 것도 보여주실 수 있나요?" },
+  { key: "I’d like to exchange this item.", value: "이 물건을 교환하고 싶습니다." },
+  { key: "I think I was charged twice.", value: "두 번 결제된 것 같습니다." },
+  { key: "The card payment didn’t go through.", value: "카드 결제가 처리되지 않았습니다." },
+  { key: "Could you cancel this transaction?", value: "이 결제를 취소해 주실 수 있나요?" },
+  { key: "I need to contact my bank.", value: "은행에 연락해야 합니다." },
+  { key: "I lost my passport and need help.", value: "여권을 잃어버려서 도움이 필요합니다." },
+  { key: "Where is the nearest police station?", value: "가장 가까운 경찰서가 어디인가요?" },
+  { key: "I’d like to file a police report.", value: "경찰 신고서를 작성하고 싶습니다." },
+  { key: "My phone was stolen.", value: "제 휴대폰을 도난당했습니다." },
+  { key: "I need to contact the Korean embassy.", value: "한국 대사관에 연락해야 합니다." },
+  { key: "I don’t feel well and need a doctor.", value: "몸이 좋지 않아 의사가 필요합니다." },
+  { key: "Is there a hospital nearby?", value: "근처에 병원이 있나요?" },
+  { key: "I need medicine for a cold.", value: "감기약이 필요합니다." },
+  { key: "Could you explain how to take this medicine?", value: "이 약을 어떻게 복용하는지 설명해 주실 수 있나요?" },
+  { key: "Could you help me make an international call?", value: "국제전화를 거는 것을 도와주실 수 있나요?" }
+];
+
+const legacySampleKeys = new Set(["apple", "book", "study", "remember", "listen", "answer"]);
 
 const emptyProfile: ProfileSummary = {
   cumulativeLearningDays: 0,
@@ -44,6 +247,10 @@ function createDraftRows(count = DRAFT_ROW_COUNT): DraftRow[] {
   return Array.from({ length: count }, () => ({ question: "", answer: "" }));
 }
 
+function studyTextClassName(baseClassName: string, text: string): string {
+  return text.length >= COMPACT_STUDY_TEXT_LENGTH ? `${baseClassName} compact-study-text` : baseClassName;
+}
+
 function getDemoUsername(): string {
   const storedUsername = localStorage.getItem(DEMO_USERNAME_KEY);
   if (storedUsername) {
@@ -58,6 +265,13 @@ function getDemoUsername(): string {
 function updateWordbookWords(wordbooks: Wordbook[], wordbookId: string, updater: (words: Word[]) => Word[]): Wordbook[] {
   return wordbooks.map((wordbook) =>
     wordbook.id === wordbookId ? { ...wordbook, words: updater(wordbook.words), updatedAt: new Date().toISOString() } : wordbook
+  );
+}
+
+function isLegacySampleWordbook(wordbook: Wordbook): boolean {
+  return (
+    wordbook.name === LEGACY_SAMPLE_WORDBOOK_NAME &&
+    (wordbook.words.length === 0 || wordbook.words.every((word) => legacySampleKeys.has(word.key)))
   );
 }
 
@@ -99,16 +313,54 @@ export function App() {
     [summary.recentWordbooks, wordbooks]
   );
 
-  async function createSampleWordbook(): Promise<Wordbook> {
-    const wordbook = await apiClient.createWordbook("기본 영어 단어장");
-    const words = await apiClient.batchWords(wordbook.id, sampleWords);
+  async function createWordbookWithWords(name: string, wordsToCreate: Array<Pick<Word, "key" | "value">>): Promise<Wordbook> {
+    const wordbook = await apiClient.createWordbook(name);
+    const words = await apiClient.batchWords(wordbook.id, wordsToCreate);
     return { ...wordbook, words };
+  }
+
+  async function createDefaultSampleWordbooks(): Promise<Wordbook[]> {
+    return [
+      await createWordbookWithWords(SAMPLE_WORDBOOK_NAME, sampleWords),
+      await createWordbookWithWords(SAMPLE_SENTENCE_WORDBOOK_NAME, sampleSentences)
+    ];
+  }
+
+  async function ensureSentenceSampleWordbook(loadedWordbooks: Wordbook[]): Promise<Wordbook[]> {
+    if (loadedWordbooks.some((wordbook) => wordbook.name === SAMPLE_SENTENCE_WORDBOOK_NAME)) {
+      return loadedWordbooks;
+    }
+    return [...loadedWordbooks, await createWordbookWithWords(SAMPLE_SENTENCE_WORDBOOK_NAME, sampleSentences)];
+  }
+
+  async function replaceLegacySampleWordbook(loadedWordbooks: Wordbook[]): Promise<Wordbook[]> {
+    const legacyWordbook = loadedWordbooks.find(isLegacySampleWordbook);
+    if (!legacyWordbook) {
+      return loadedWordbooks;
+    }
+
+    const existingTravelSample = loadedWordbooks.find((wordbook) => wordbook.id !== legacyWordbook.id && wordbook.name === SAMPLE_WORDBOOK_NAME);
+    if (existingTravelSample) {
+      await apiClient.deleteWordbook(legacyWordbook.id);
+      return loadedWordbooks.filter((wordbook) => wordbook.id !== legacyWordbook.id);
+    }
+
+    for (const word of legacyWordbook.words) {
+      await apiClient.deleteWord(word.id);
+    }
+
+    const renamed = await apiClient.renameWordbook(legacyWordbook.id, SAMPLE_WORDBOOK_NAME);
+    const words = await apiClient.batchWords(legacyWordbook.id, sampleWords);
+    return loadedWordbooks.map((wordbook) => (wordbook.id === legacyWordbook.id ? { ...renamed, words } : wordbook));
   }
 
   const loadWordbooks = useCallback(async () => {
     let loaded = await apiClient.listWordbooks();
     if (loaded.length === 0) {
-      loaded = [await createSampleWordbook()];
+      loaded = await createDefaultSampleWordbooks();
+    } else {
+      loaded = await replaceLegacySampleWordbook(loaded);
+      loaded = await ensureSentenceSampleWordbook(loaded);
     }
     setWordbooks(loaded);
     setActiveWordbookId((current) => current || loaded[0]?.id || "");
@@ -326,7 +578,7 @@ export function App() {
     await apiClient.batchWords(activeWordbook.id, sampleWords);
     const refreshed = await apiClient.listWords(activeWordbook.id);
     setWordbooks((current) => updateWordbookWords(current, activeWordbook.id, () => refreshed));
-    setMessage("샘플 영어 단어를 넣었습니다.");
+    setMessage("해외 여행 필수 영단어 100개를 넣었습니다.");
     resetStudySession();
   }
 
@@ -501,10 +753,10 @@ export function App() {
               {currentCard ? (
                 <article className="memory-card notebook-card" aria-label="단어 암기장">
                   <section className="notebook-section notebook-question" aria-label="앞면">
-                    <strong className="study-term">{currentCard.prompt}</strong>
+                    <strong className={studyTextClassName("study-term", currentCard.prompt)}>{currentCard.prompt}</strong>
                   </section>
                   <section className={session?.revealed ? "notebook-section notebook-answer revealed" : "notebook-section notebook-answer"} aria-label="뒷면">
-                    {session?.revealed ? <strong className="study-answer">{currentCard.answer}</strong> : null}
+                    {session?.revealed ? <strong className={studyTextClassName("study-answer", currentCard.answer)}>{currentCard.answer}</strong> : null}
                   </section>
                 </article>
               ) : (

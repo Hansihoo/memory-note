@@ -5,7 +5,11 @@ test("creates a wordbook, imports markdown, and studies one card", async ({ page
 
   await page.getByRole("button", { name: "시작하기" }).click();
   await expect(page.getByRole("navigation", { name: "상단 메뉴" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /기본 영어 단어장/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /해외 여행 필수 영단어/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /해외여행 필수 영어문장/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /100/ })).toHaveCount(2);
+  await page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /해외여행 필수 영어문장/ }).click();
+  await expect(page.locator(".notebook-question .study-term")).toHaveClass(/compact-study-text/);
 
   const wordbookName = `시험 단어장 ${Date.now()}`;
   await page.getByLabel("새 단어장 이름").fill(wordbookName);
