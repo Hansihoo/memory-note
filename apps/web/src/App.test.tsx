@@ -32,6 +32,9 @@ describe("App", () => {
       if (url.endsWith("/auth/register")) {
         return jsonResponse({ token: "token-1", user: { id: 1, username: "demo-learner" } }, { status: 201 });
       }
+      if (url.includes("/sync/pull")) {
+        return jsonResponse({ serverRevision: 0, wordbooks: [], words: [] });
+      }
       if (url.endsWith("/wordbooks") && method === "GET") {
         return jsonResponse([]);
       }
@@ -63,7 +66,12 @@ describe("App", () => {
     });
 
     render(<App />);
-    await userEvent.click(screen.getByRole("button", { name: "시작하기" }));
+    expect(screen.getByRole("button", { name: "Google로 시작하기" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "로그인하기" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "가입" }));
+    await userEvent.type(screen.getByLabelText("표시 이름 또는 아이디"), "demo-learner");
+    await userEvent.type(screen.getByLabelText("비밀번호"), "password123");
+    await userEvent.click(screen.getByRole("button", { name: "가입하기" }));
 
     expect(await screen.findByText("demo-learner")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "해외 여행 필수 영단어" })).toBeInTheDocument();
@@ -82,5 +90,14 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: /해외여행 필수 영어문장/ })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "단어장 목록" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "암기" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "단어장 편집" }));
+    await userEvent.click(screen.getByRole("button", { name: "파일 가져오기" }));
+    expect(screen.getByRole("dialog", { name: "파일 가져오기" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Google Drive" }));
+    expect(screen.getByRole("button", { name: "Google Drive에서 선택" })).toBeEnabled();
+    expect(screen.getByText(/Google Cloud 설정 후 사용할 수 있습니다/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Google Drive에서 선택" }));
+    expect(screen.getByText(/Google Drive를 열려면 Google Cloud OAuth\/API 설정이 필요합니다/)).toBeInTheDocument();
   });
 });

@@ -55,6 +55,9 @@ def get_engine() -> Engine:
 def init_db() -> None:
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
+    from .migrations import run_compat_migrations
+
+    run_compat_migrations(engine)
 
 
 def get_db() -> Generator:

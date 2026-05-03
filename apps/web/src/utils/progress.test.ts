@@ -25,8 +25,8 @@ describe("progress helpers", () => {
 
   it("sorts recent wordbooks by updatedAt", () => {
     const wordbooks = [
-      { id: "a", name: "A", words: [], createdAt: "2026", updatedAt: "2026-05-01T00:00:00.000Z" },
-      { id: "b", name: "B", words: [], createdAt: "2026", updatedAt: "2026-05-02T00:00:00.000Z" }
+      { id: "a", name: "A", words: [], createdAt: "2026", updatedAt: "2026-05-01T00:00:00.000Z", deletedAt: null, syncRevision: 1 },
+      { id: "b", name: "B", words: [], createdAt: "2026", updatedAt: "2026-05-02T00:00:00.000Z", deletedAt: null, syncRevision: 2 }
     ] satisfies Wordbook[];
 
     expect(getRecentWordbooks(wordbooks, 1)[0].id).toBe("b");

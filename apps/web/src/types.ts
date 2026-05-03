@@ -8,6 +8,8 @@ export interface Word {
   lastViewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
+  syncRevision: number;
 }
 
 export interface Wordbook {
@@ -16,6 +18,8 @@ export interface Wordbook {
   words: Word[];
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
+  syncRevision: number;
 }
 
 export interface UserProfile {

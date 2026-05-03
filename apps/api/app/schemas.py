@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, constr
 
@@ -15,6 +15,10 @@ class AuthRequest(BaseModel):
     password: constr(min_length=8, max_length=256)
 
 
+class GoogleAuthRequest(BaseModel):
+    id_token: constr(strip_whitespace=True, min_length=1) = Field(alias="idToken")
+
+
 class TokenResponse(ApiModel):
     token: str
     token_type: str = Field("bearer", alias="tokenType")
@@ -24,6 +28,11 @@ class TokenResponse(ApiModel):
 class UserResponse(ApiModel):
     id: int
     username: str
+    email: Optional[str] = None
+    display_name: Optional[str] = Field(None, alias="displayName")
+    avatar_url: Optional[str] = Field(None, alias="avatarUrl")
+    auth_provider: str = Field(alias="authProvider")
+    sync_revision: int = Field(alias="syncRevision")
     created_at: datetime = Field(alias="createdAt")
 
 
@@ -43,6 +52,8 @@ class WordbookResponse(ApiModel):
     description: Optional[str] = None
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
+    deleted_at: Optional[datetime] = Field(None, alias="deletedAt")
+    sync_revision: int = Field(alias="syncRevision")
     word_count: int = Field(0, alias="wordCount")
 
 
@@ -66,6 +77,8 @@ class WordResponse(ApiModel):
     last_viewed_at: Optional[datetime] = Field(None, alias="lastViewedAt")
     created_at: datetime = Field(alias="createdAt")
     updated_at: datetime = Field(alias="updatedAt")
+    deleted_at: Optional[datetime] = Field(None, alias="deletedAt")
+    sync_revision: int = Field(alias="syncRevision")
 
 
 class WordBatchItem(WordCreate):
@@ -108,6 +121,46 @@ class ProfileSummary(ApiModel):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class SyncChange(BaseModel):
+    entity_type: constr(strip_whitespace=True, regex="^(wordbook|word)$") = Field(alias="entityType")
+    entity_id: Optional[int] = Field(None, alias="entityId")
+    client_id: Optional[str] = Field(None, alias="clientId")
+    base_revision: int = Field(0, alias="baseRevision")
+    operation: constr(strip_whitespace=True, regex="^(create|update|delete)$")
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class SyncPushRequest(BaseModel):
+    changes: List[SyncChange]
+
+
+class SyncApplied(ApiModel):
+    entity_type: str = Field(alias="entityType")
+    entity_id: int = Field(alias="entityId")
+    client_id: Optional[str] = Field(None, alias="clientId")
+    sync_revision: int = Field(alias="syncRevision")
+
+
+class SyncConflict(ApiModel):
+    entity_type: str = Field(alias="entityType")
+    entity_id: Optional[int] = Field(None, alias="entityId")
+    client_id: Optional[str] = Field(None, alias="clientId")
+    reason: str
+    server_entity: Optional[Dict[str, Any]] = Field(None, alias="serverEntity")
+
+
+class SyncPushResponse(ApiModel):
+    server_revision: int = Field(alias="serverRevision")
+    applied: List[SyncApplied]
+    conflicts: List[SyncConflict]
+
+
+class SyncPullResponse(ApiModel):
+    server_revision: int = Field(alias="serverRevision")
+    wordbooks: List[WordbookResponse]
+    words: List[WordResponse]
 
 
 TokenResponse.update_forward_refs()

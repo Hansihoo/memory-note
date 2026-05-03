@@ -19,6 +19,7 @@
 - 엑셀형 표에서 단어 추가와 삭제를 함께 처리
 - 새 단어 입력 기본 행은 1줄만 표시
 - 화면 아래까지 빈 격자 행 표시
+- 편집 화면 전체가 커지지 않도록 시트 영역 내부에서 스크롤
 - 질문/답변 열만 셀 선택 표시
 - 단어 필수 정보 저장: `key`, `value`, `lastViewedAt`
 
@@ -26,6 +27,14 @@
 - 앱이 읽기 쉬운 Markdown 단어장 스펙 정의
 - Markdown 파일 업로드
 - 업로드한 단어장 미리보기
+- `편집`, `파일 내보내기`, `파일 가져오기` 작업 모드 분리
+- `파일 내보내기` 클릭 시 엑셀형 시트를 숨기고 현재 선택 단어장을 편집 가능한 Markdown 텍스트로 표시
+- `.md` 파일 다운로드
+- `파일 가져오기` 클릭 시 팝업창을 열고 로컬 파일 / Google Drive 선택 UI 표시
+- 로컬 `.md/.txt` 파일 읽기
+- Google Drive Picker + Google Identity Services 기반 파일 선택
+- 가져온 Markdown 텍스트를 새 암기장으로 생성
+- Google Drive 미설정 시 설정 필요 안내
 - import 오류 표시
 - Markdown 파일 export
 
@@ -50,10 +59,15 @@
 - 최근 학습한 단어장 바로가기
 
 ### 6. 계정/동기화
-- 사용자 로그인
+- Google 로그인 우선
+- 개발/테스트용 password 로그인 fallback
 - 사용자별 단어장 분리
 - 웹에서 저장한 단어장을 클라우드에 저장
 - 이후 앱 클라이언트가 같은 데이터를 읽을 수 있는 API 구조
+- PostgreSQL 운영 DB 기준
+- `sync/pull`, `sync/push` 기반 멀티앱 동기화 API
+- 서버 revision과 sync event 기록
+- 서버 우선 충돌 처리
 
 ### 7. 디버깅/검증
 - unit test
@@ -169,18 +183,26 @@
 ### 4단계. 로그인과 클라우드 동기화 구현
 - 목표: 사용자별로 단어장을 분리해 클라우드에 저장한다.
 - 개발:
-  - 로그인 방식 결정 후 구현
+  - Google 로그인 우선 구현
+  - 개발/테스트용 password 로그인 fallback 유지
   - 사용자 테이블 또는 외부 auth 연동
   - 사용자별 단어장 권한 처리
   - 로그인한 사용자 단어장만 조회
+  - PostgreSQL `DATABASE_URL` 운영 연결
+  - 서버 revision 기반 `sync/pull`, `sync/push` API
+  - 삭제 tombstone과 sync event 기록
+  - 서버 우선 충돌 응답
   - 로그아웃
 - 결과물:
   - 로그인 화면
   - 사용자별 단어장 저장
   - 인증된 API
+  - 멀티앱 동기화 API
 - 검증:
+  - integration test: Google ID token 검증 mock 로그인
   - integration test: 로그인하지 않은 요청 차단
   - integration test: 다른 사용자 단어장 접근 차단
+  - integration test: sync pull/push와 서버 우선 충돌
   - e2e test: 로그인 -> 단어장 생성 -> 로그아웃 -> 재로그인 -> 데이터 유지
 - 로그:
   - `DEBUG_AUTH=true`일 때만 인증 흐름 상세 로그 출력

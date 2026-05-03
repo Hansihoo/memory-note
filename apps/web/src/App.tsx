@@ -1,6 +1,6 @@
-import { BookOpen, Check, ChevronLeft, ChevronRight, Download, LogOut, Plus, Trash2, Upload } from "lucide-react";
+import { BookOpen, Check, ChevronLeft, ChevronRight, Download, LogOut, Plus, Trash2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ClipboardEvent, FormEvent } from "react";
+import type { ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import { apiClient } from "./api/client";
 import type { ProfileSummary, UserProfile, Word, Wordbook } from "./types";
 import { parseWordMarkdown, serializeWordsToMarkdown } from "./utils/markdown";
@@ -14,6 +14,15 @@ const COMPACT_STUDY_TEXT_LENGTH = 15;
 const SAMPLE_WORDBOOK_NAME = "해외 여행 필수 영단어";
 const SAMPLE_SENTENCE_WORDBOOK_NAME = "해외여행 필수 영어문장";
 const LEGACY_SAMPLE_WORDBOOK_NAME = "기본 영어 단어장";
+const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
+const GOOGLE_PICKER_SCRIPT_URL = "https://apis.google.com/js/api.js";
+
+const googleDriveConfig = {
+  clientId: (import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").trim(),
+  apiKey: (import.meta.env.VITE_GOOGLE_API_KEY ?? "").trim(),
+  appId: (import.meta.env.VITE_GOOGLE_APP_ID ?? "").trim()
+};
 
 const sampleWords = [
   { key: "airport", value: "공항" },
@@ -237,10 +246,82 @@ interface DraftRow {
 type HomeView = "study" | "edit" | "profile";
 type ReviewState = "question" | "known-reveal" | "unknown-reveal";
 type SheetColumn = "question" | "answer";
+type EditWorkspaceMode = "sheet" | "export";
+type ImportSource = "local" | "google-drive";
+type PasswordAuthMode = "login" | "register";
+
+interface GoogleTokenResponse {
+  access_token?: string;
+  error?: string;
+}
+
+interface GoogleTokenClient {
+  requestAccessToken(options?: { prompt?: string }): void;
+}
+
+interface GoogleTokenClientConfig {
+  client_id: string;
+  scope: string;
+  callback: (response: GoogleTokenResponse) => void;
+  error_callback?: (error: unknown) => void;
+}
+
+interface GooglePickerDocument {
+  id: string;
+  name: string;
+  mimeType: string;
+}
+
+interface GooglePickerData {
+  action?: string;
+  docs?: GooglePickerDocument[];
+}
+
+interface GooglePickerBuilder {
+  setAppId(appId: string): GooglePickerBuilder;
+  setOAuthToken(token: string): GooglePickerBuilder;
+  setDeveloperKey(key: string): GooglePickerBuilder;
+  addView(view: unknown): GooglePickerBuilder;
+  setCallback(callback: (data: GooglePickerData) => void): GooglePickerBuilder;
+  build(): { setVisible(visible: boolean): void };
+}
+
+interface GooglePickerView {
+  setMimeTypes(mimeTypes: string): GooglePickerView;
+}
+
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        id?: {
+          initialize(config: { client_id: string; callback: (response: { credential?: string }) => void }): void;
+          prompt(): void;
+        };
+        oauth2?: {
+          initTokenClient(config: GoogleTokenClientConfig): GoogleTokenClient;
+        };
+      };
+      picker?: {
+        Action: { PICKED: string; CANCEL: string };
+        DocsView: new () => GooglePickerView;
+        PickerBuilder: new () => GooglePickerBuilder;
+      };
+    };
+    gapi?: {
+      load(api: string, options: { callback: () => void; onerror?: () => void }): void;
+    };
+  }
+}
 
 interface SheetSelection {
   rowId: string;
   column: SheetColumn;
+}
+
+interface ImportValidation {
+  count: number;
+  error: string;
 }
 
 function createDraftRows(count = DRAFT_ROW_COUNT): DraftRow[] {
@@ -249,6 +330,148 @@ function createDraftRows(count = DRAFT_ROW_COUNT): DraftRow[] {
 
 function studyTextClassName(baseClassName: string, text: string): string {
   return text.length >= COMPACT_STUDY_TEXT_LENGTH ? `${baseClassName} compact-study-text` : baseClassName;
+}
+
+function hasGoogleDriveConfig(): boolean {
+  return Boolean(googleDriveConfig.clientId && googleDriveConfig.apiKey && googleDriveConfig.appId);
+}
+
+function sanitizeFileName(name: string): string {
+  const sanitized = name.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ");
+  return sanitized || "wordbook";
+}
+
+function wordbookNameFromFileName(fileName: string): string {
+  return fileName.replace(/\.(md|markdown|txt)$/i, "").trim() || `가져온 암기장 ${new Date().toLocaleString()}`;
+}
+
+function validateMarkdownImport(markdownText: string): ImportValidation {
+  if (!markdownText.trim()) {
+    return { count: 0, error: "가져올 Markdown을 입력하거나 파일을 선택하세요." };
+  }
+
+  try {
+    const parsed = parseWordMarkdown(markdownText);
+    if (parsed.length === 0) {
+      return { count: 0, error: "가져올 단어가 없습니다." };
+    }
+    return { count: parsed.length, error: "" };
+  } catch (error) {
+    return { count: 0, error: error instanceof Error ? error.message : "Markdown을 읽지 못했습니다." };
+  }
+}
+
+function loadScriptOnce(src: string, id: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById(id) as HTMLScriptElement | null;
+    if (existing?.dataset.loaded === "true") {
+      resolve();
+      return;
+    }
+
+    if (existing) {
+      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("error", () => reject(new Error(`${id} script load failed`)), { once: true });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      script.dataset.loaded = "true";
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`${id} script load failed`));
+    document.head.appendChild(script);
+  });
+}
+
+async function loadGoogleDrivePickerApi(): Promise<void> {
+  await Promise.all([
+    loadScriptOnce(GOOGLE_IDENTITY_SCRIPT_URL, "google-identity-services"),
+    loadScriptOnce(GOOGLE_PICKER_SCRIPT_URL, "google-picker-api")
+  ]);
+
+  await new Promise<void>((resolve, reject) => {
+    if (!window.gapi) {
+      reject(new Error("Google API 클라이언트를 불러오지 못했습니다."));
+      return;
+    }
+    window.gapi.load("picker", {
+      callback: resolve,
+      onerror: () => reject(new Error("Google Picker를 불러오지 못했습니다."))
+    });
+  });
+}
+
+function requestGoogleAccessToken(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const oauth2 = window.google?.accounts?.oauth2;
+    if (!oauth2) {
+      reject(new Error("Google 로그인 모듈을 불러오지 못했습니다."));
+      return;
+    }
+
+    const tokenClient = oauth2.initTokenClient({
+      client_id: googleDriveConfig.clientId,
+      scope: GOOGLE_DRIVE_SCOPE,
+      callback: (response) => {
+        if (response.error || !response.access_token) {
+          reject(new Error(response.error || "Google Drive 접근 권한을 받지 못했습니다."));
+          return;
+        }
+        resolve(response.access_token);
+      },
+      error_callback: reject
+    });
+    tokenClient.requestAccessToken({ prompt: "" });
+  });
+}
+
+function openGoogleDrivePicker(accessToken: string): Promise<GooglePickerDocument | null> {
+  return new Promise((resolve, reject) => {
+    const picker = window.google?.picker;
+    if (!picker) {
+      reject(new Error("Google Picker를 사용할 수 없습니다."));
+      return;
+    }
+
+    const view = new picker.DocsView();
+    view.setMimeTypes("text/markdown,text/plain,application/vnd.google-apps.document");
+    new picker.PickerBuilder()
+      .setAppId(googleDriveConfig.appId)
+      .setOAuthToken(accessToken)
+      .setDeveloperKey(googleDriveConfig.apiKey)
+      .addView(view)
+      .setCallback((data) => {
+        if (data.action === picker.Action.PICKED) {
+          resolve(data.docs?.[0] ?? null);
+        }
+        if (data.action === picker.Action.CANCEL) {
+          resolve(null);
+        }
+      })
+      .build()
+      .setVisible(true);
+  });
+}
+
+async function readGoogleDriveFileText(file: GooglePickerDocument, accessToken: string): Promise<string> {
+  const encodedFileId = encodeURIComponent(file.id);
+  const url = file.mimeType.startsWith("application/vnd.google-apps.")
+    ? `https://www.googleapis.com/drive/v3/files/${encodedFileId}/export?mimeType=text/plain`
+    : `https://www.googleapis.com/drive/v3/files/${encodedFileId}?alt=media`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!response.ok) {
+    throw new Error("Google Drive 파일을 읽지 못했습니다.");
+  }
+  return response.text();
 }
 
 function getDemoUsername(): string {
@@ -280,6 +503,7 @@ export function App() {
   const [summary, setSummary] = useState<ProfileSummary>(emptyProfile);
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordAuthMode, setPasswordAuthMode] = useState<PasswordAuthMode>("login");
   const [authError, setAuthError] = useState("");
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [activeWordbookId, setActiveWordbookId] = useState("");
@@ -288,6 +512,11 @@ export function App() {
   const [draftRows, setDraftRows] = useState<DraftRow[]>(() => createDraftRows());
   const [markdown, setMarkdown] = useState("");
   const [message, setMessage] = useState("");
+  const [editMode, setEditMode] = useState<EditWorkspaceMode>("sheet");
+  const [importSource, setImportSource] = useState<ImportSource>("local");
+  const [importWordbookName, setImportWordbookName] = useState("");
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [googleDriveLoading, setGoogleDriveLoading] = useState(false);
   const [session, setSession] = useState<StudySession | null>(null);
   const [reviewState, setReviewState] = useState<ReviewState>("question");
   const [selectedCell, setSelectedCell] = useState<SheetSelection | null>(null);
@@ -298,6 +527,7 @@ export function App() {
 
   const activeWordbook = wordbooks.find((wordbook) => wordbook.id === activeWordbookId) ?? wordbooks[0] ?? null;
   const currentCard = session ? getCurrentCard(session) : null;
+  const importValidation = useMemo(() => validateMarkdownImport(markdown), [markdown]);
   const recentWordbooks = useMemo(
     () =>
       summary.recentWordbooks.length > 0
@@ -355,7 +585,7 @@ export function App() {
   }
 
   const loadWordbooks = useCallback(async () => {
-    let loaded = await apiClient.listWordbooks();
+    let loaded = await apiClient.syncPull(0);
     if (loaded.length === 0) {
       loaded = await createDefaultSampleWordbooks();
     } else {
@@ -431,16 +661,63 @@ export function App() {
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
     const enteredUsername = loginName.trim();
-    const username = enteredUsername.length >= 3 ? enteredUsername : getDemoUsername();
-    const loginPassword = password.length >= 8 ? password : DEMO_PASSWORD;
+    const username = enteredUsername.length >= 3 ? enteredUsername : passwordAuthMode === "register" ? "" : getDemoUsername();
+    const loginPassword = password.length >= 8 ? password : passwordAuthMode === "register" ? "" : DEMO_PASSWORD;
+
+    if (!username || !loginPassword) {
+      setAuthError("아이디는 3자 이상, 비밀번호는 8자 이상 입력하세요.");
+      return;
+    }
 
     setAuthError("");
     try {
-      const user = await apiClient.loginOrRegister({ username, password: loginPassword });
+      const user =
+        passwordAuthMode === "register"
+          ? await apiClient.register({ username, password: loginPassword })
+          : await apiClient.login({ username, password: loginPassword });
       setProfile(user);
       await loadAfterAuth();
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "로그인에 실패했습니다.");
+      setAuthError(error instanceof Error ? error.message : passwordAuthMode === "register" ? "가입에 실패했습니다." : "로그인에 실패했습니다.");
+    }
+  }
+
+  async function handleGoogleCredential(idToken: string) {
+    setAuthError("");
+    try {
+      const user = await apiClient.loginWithGoogle(idToken);
+      setProfile(user);
+      await loadAfterAuth();
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Google 로그인에 실패했습니다.");
+    }
+  }
+
+  async function handleGoogleLogin() {
+    const clientId = googleDriveConfig.clientId;
+    if (!clientId) {
+      setAuthError("Google 로그인을 사용하려면 VITE_GOOGLE_CLIENT_ID 설정이 필요합니다. 개발 중에는 아래 개발용 시작하기를 사용할 수 있습니다.");
+      return;
+    }
+
+    try {
+      await loadScriptOnce(GOOGLE_IDENTITY_SCRIPT_URL, "google-identity-services");
+      const googleId = window.google?.accounts?.id;
+      if (!googleId) {
+        setAuthError("Google 로그인 모듈을 불러오지 못했습니다.");
+        return;
+      }
+      googleId.initialize({
+        client_id: clientId,
+        callback: (response) => {
+          if (response.credential) {
+            void handleGoogleCredential(response.credential);
+          }
+        }
+      });
+      googleId.prompt();
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Google 로그인을 시작하지 못했습니다.");
     }
   }
 
@@ -466,6 +743,10 @@ export function App() {
     setSelectedCell(null);
     setNewWordbookName("");
     setDraftRows(createDraftRows());
+    setMarkdown("");
+    setImportWordbookName("");
+    setImportModalOpen(false);
+    setEditMode("sheet");
     setHomeView("edit");
     resetStudySession();
   }
@@ -487,6 +768,10 @@ export function App() {
       const next = current.filter((wordbook) => wordbook.id !== id);
       setActiveWordbookId(next[0]?.id ?? "");
       setEditingWordbookName(next[0]?.name ?? "");
+      setMarkdown("");
+      setImportWordbookName("");
+      setImportModalOpen(false);
+      setEditMode("sheet");
       return next;
     });
     resetStudySession();
@@ -498,6 +783,10 @@ export function App() {
     setEditingWordbookName(wordbook.name);
     setDraftRows(createDraftRows());
     setSelectedCell(null);
+    setMarkdown("");
+    setImportWordbookName("");
+    setImportModalOpen(false);
+    setEditMode("sheet");
     resetStudySession();
   }
 
@@ -592,29 +881,130 @@ export function App() {
     resetStudySession();
   }
 
-  async function handleImport() {
-    if (!activeWordbook) {
-      return;
-    }
-
-    try {
-      const parsed = parseWordMarkdown(markdown);
-      const words = await apiClient.batchWords(activeWordbook.id, parsed);
-      const refreshed = await apiClient.listWords(activeWordbook.id);
-      setWordbooks((current) => updateWordbookWords(current, activeWordbook.id, () => refreshed));
-      setMessage(`${words.length}개 단어를 가져왔습니다.`);
-      resetStudySession();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "가져오기에 실패했습니다.");
-    }
+  function openSheetMode() {
+    setEditMode("sheet");
+    setMarkdown("");
+    setImportWordbookName("");
+    setImportModalOpen(false);
+    setSelectedCell(null);
   }
 
-  function handleExport() {
+  function openExportMode() {
     if (!activeWordbook) {
       return;
     }
     setMarkdown(serializeWordsToMarkdown(activeWordbook.words));
-    setMessage("현재 단어장을 Markdown으로 내보냈습니다.");
+    setEditMode("export");
+    setImportWordbookName("");
+    setImportModalOpen(false);
+    setSelectedCell(null);
+    setMessage("현재 단어장을 내보내기 형식으로 표시했습니다.");
+  }
+
+  function openImportMode() {
+    setImportModalOpen(true);
+    setImportSource("local");
+    setMarkdown("");
+    setImportWordbookName("");
+    setSelectedCell(null);
+    setMessage("");
+  }
+
+  function closeImportModal() {
+    setImportModalOpen(false);
+    setMarkdown("");
+    setImportWordbookName("");
+    setImportSource("local");
+    setGoogleDriveLoading(false);
+  }
+
+  function downloadMarkdownFile() {
+    if (!activeWordbook) {
+      return;
+    }
+
+    const blob = new Blob([markdown || serializeWordsToMarkdown(activeWordbook.words)], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${sanitizeFileName(activeWordbook.name)}.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+    setMessage("Markdown 파일을 다운로드했습니다.");
+  }
+
+  async function handleLocalFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      setMarkdown(text);
+      setImportWordbookName(wordbookNameFromFileName(file.name));
+      setMessage(`${file.name} 파일을 불러왔습니다.`);
+    } catch {
+      setMessage("로컬 파일을 읽지 못했습니다.");
+    } finally {
+      event.target.value = "";
+    }
+  }
+
+  async function handleGoogleDrivePick() {
+    if (!hasGoogleDriveConfig()) {
+      setMessage("Google Drive를 열려면 Google Cloud OAuth/API 설정이 필요합니다. `.env`에 Google Drive 값을 추가한 뒤 개발 서버를 다시 시작하세요.");
+      return;
+    }
+
+    setGoogleDriveLoading(true);
+    try {
+      await loadGoogleDrivePickerApi();
+      const accessToken = await requestGoogleAccessToken();
+      const file = await openGoogleDrivePicker(accessToken);
+      if (!file) {
+        setMessage("Google Drive 파일 선택을 취소했습니다.");
+        return;
+      }
+      const text = await readGoogleDriveFileText(file, accessToken);
+      setMarkdown(text);
+      setImportWordbookName(wordbookNameFromFileName(file.name));
+      setMessage(`${file.name} 파일을 Google Drive에서 불러왔습니다.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Google Drive 파일을 가져오지 못했습니다.");
+    } finally {
+      setGoogleDriveLoading(false);
+    }
+  }
+
+  async function createWordbookFromMarkdown() {
+    try {
+      const parsed = parseWordMarkdown(markdown);
+      if (parsed.length === 0) {
+        setMessage("가져올 단어가 없습니다.");
+        return;
+      }
+
+      const name = importWordbookName.trim() || `가져온 암기장 ${new Date().toLocaleString()}`;
+      const created = await apiClient.createWordbook(name);
+      const words = await apiClient.batchWords(created.id, parsed);
+      const nextWordbook = { ...created, words };
+      setWordbooks((current) => [nextWordbook, ...current]);
+      setActiveWordbookId(nextWordbook.id);
+      setEditingWordbookName(nextWordbook.name);
+      setDraftRows(createDraftRows());
+      setSelectedCell(null);
+      setMarkdown("");
+      setImportWordbookName("");
+      setImportModalOpen(false);
+      setEditMode("sheet");
+      setMessage(`${words.length}개 단어로 새 암기장을 만들었습니다.`);
+      resetStudySession();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "새 암기장을 만들지 못했습니다.");
+    }
   }
 
   function goNextCard() {
@@ -668,6 +1058,32 @@ export function App() {
             <p className="eyebrow">Memory Assistant</p>
             <h1>어학 단어 학습</h1>
           </div>
+          <button className="primary-button google-login-button" type="button" onClick={handleGoogleLogin}>
+            Google로 시작하기
+          </button>
+          <div className="login-divider">아이디로 시작하기</div>
+          <div className="password-auth-tabs" aria-label="아이디 인증 방식">
+            <button
+              className={passwordAuthMode === "login" ? "active" : ""}
+              type="button"
+              onClick={() => {
+                setPasswordAuthMode("login");
+                setAuthError("");
+              }}
+            >
+              로그인
+            </button>
+            <button
+              className={passwordAuthMode === "register" ? "active" : ""}
+              type="button"
+              onClick={() => {
+                setPasswordAuthMode("register");
+                setAuthError("");
+              }}
+            >
+              가입
+            </button>
+          </div>
           <label>
             표시 이름 또는 아이디
             <input value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" />
@@ -677,7 +1093,7 @@ export function App() {
             <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
           </label>
           {authError && <p className="form-error">{authError}</p>}
-          <button className="primary-button" type="submit">시작하기</button>
+          <button className="ghost-button" type="submit">{passwordAuthMode === "register" ? "가입하기" : "로그인하기"}</button>
         </form>
       </main>
     );
@@ -799,133 +1215,228 @@ export function App() {
                 삭제
               </button>
             </header>
+            {message && <p className="status-line workspace-status">{message}</p>}
+
+            <div className="edit-mode-tabs" aria-label="단어장 편집 작업">
+              <button className={editMode === "sheet" ? "active" : ""} type="button" onClick={openSheetMode}>
+                편집
+              </button>
+              <button className={editMode === "export" ? "active" : ""} type="button" onClick={openExportMode}>
+                <Download size={16} />
+                파일 내보내기
+              </button>
+              <button className={importModalOpen ? "active" : ""} type="button" onClick={openImportMode}>
+                <Upload size={16} />
+                파일 가져오기
+              </button>
+            </div>
 
             <div className="edit-grid">
-              <section className="panel word-panel">
-                <div className="panel-heading excel-heading">
-                  <div>
-                    <p className="eyebrow">Workbook Sheet</p>
-                    <h2>단어 편집</h2>
+              {editMode === "sheet" && (
+                <section className="panel word-panel">
+                  <div className="panel-heading excel-heading">
+                    <div>
+                      <p className="eyebrow">Workbook Sheet</p>
+                      <h2>단어 편집</h2>
+                    </div>
+                    <span>{activeWordbook.words.length}개 저장됨</span>
                   </div>
-                  <span>{activeWordbook.words.length}개 저장됨</span>
-                </div>
 
-                <div className="word-entry-panel">
-                  <div className="sheet-toolbar">
-                    <p className="sheet-hint">엑셀에서 두 열을 복사한 뒤 첫 칸에 붙여넣을 수 있습니다.</p>
+                  <div className="word-entry-panel">
+                    <div className="sheet-toolbar">
+                      <p className="sheet-hint">엑셀에서 두 열을 복사한 뒤 첫 칸에 붙여넣을 수 있습니다.</p>
+                      <div className="button-group">
+                        <button className="ghost-button" type="button" onClick={() => addDraftRows()}>
+                          <Plus size={16} />
+                          줄 추가
+                        </button>
+                        <button className="ghost-button" type="button" onClick={handleAddSampleWords}>
+                          샘플 넣기
+                        </button>
+                        <button className="primary-button" type="button" onClick={handleSaveDraftRows}>
+                          단어 저장
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="sheet-grid excel-sheet" role="table" aria-label="단어 추가 및 삭제표">
+                      <div className="sheet-row sheet-columns" role="row">
+                        <span />
+                        <span>A</span>
+                        <span>B</span>
+                        <span>C</span>
+                        <span>D</span>
+                      </div>
+                      <div className="sheet-row sheet-head" role="row">
+                        <span>#</span>
+                        <span>질문</span>
+                        <span>답변</span>
+                        <span>최근 학습</span>
+                        <span>관리</span>
+                      </div>
+                      {activeWordbook.words.map((word, index) => {
+                        const rowId = `saved-${word.id}`;
+                        return (
+                        <div className="sheet-row saved-sheet-row" role="row" key={word.id}>
+                          <span>{index + 1}</span>
+                          <span className={sheetCellClass(rowId, "question")} onClick={() => selectSheetCell(rowId, "question")}>{word.key}</span>
+                          <span className={sheetCellClass(rowId, "answer")} onClick={() => selectSheetCell(rowId, "answer")}>{word.value}</span>
+                          <span className="sheet-cell muted-cell" onClick={() => setSelectedCell(null)}>{word.lastViewedAt ? new Date(word.lastViewedAt).toLocaleString() : "-"}</span>
+                          <span className="sheet-action-cell">
+                            <button className="icon-button" onClick={() => handleDeleteWord(word.id)} aria-label={`${word.key} 삭제`} title="삭제">
+                              <Trash2 size={16} />
+                            </button>
+                          </span>
+                        </div>
+                        );
+                      })}
+                      {draftRows.map((row, index) => {
+                        const rowId = `draft-${index}`;
+                        return (
+                        <div className="sheet-row draft-sheet-row" role="row" key={index}>
+                          <span>{activeWordbook.words.length + index + 1}</span>
+                          <input
+                            className={sheetCellClass(rowId, "question", "sheet-input")}
+                            value={row.question}
+                            onChange={(event) => updateDraftRow(index, "question", event.target.value)}
+                            onFocus={() => selectSheetCell(rowId, "question")}
+                            onPaste={(event) => handleDraftPaste(event, index, "question")}
+                            placeholder={index === 0 ? "apple" : ""}
+                            aria-label={`질문 ${index + 1}`}
+                          />
+                          <input
+                            className={sheetCellClass(rowId, "answer", "sheet-input")}
+                            value={row.answer}
+                            onChange={(event) => updateDraftRow(index, "answer", event.target.value)}
+                            onFocus={() => selectSheetCell(rowId, "answer")}
+                            onPaste={(event) => handleDraftPaste(event, index, "answer")}
+                            placeholder={index === 0 ? "사과" : ""}
+                            aria-label={`답변 ${index + 1}`}
+                          />
+                          <span className="sheet-cell muted-cell" onClick={() => setSelectedCell(null)}>새 단어</span>
+                          <span className="sheet-action-cell">
+                            <button className="icon-button" onClick={() => clearDraftRow(index)} aria-label={`입력 ${index + 1} 지우기`} title="입력 지우기" type="button">
+                              <Trash2 size={16} />
+                            </button>
+                          </span>
+                        </div>
+                        );
+                      })}
+                      {Array.from({ length: BLANK_SHEET_ROW_COUNT }, (_, index) => (
+                        <div className="sheet-row blank-sheet-row" role="row" key={`blank-${index}`} aria-hidden="true">
+                          <span>{activeWordbook.words.length + draftRows.length + index + 1}</span>
+                          <span />
+                          <span />
+                          <span />
+                          <span />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {editMode === "export" && (
+                <section className="panel file-workspace export-panel" aria-label="파일 내보내기 화면">
+                  <div className="panel-heading file-heading">
+                    <div>
+                      <p className="eyebrow">Markdown Export</p>
+                      <h2>파일 내보내기</h2>
+                    </div>
                     <div className="button-group">
-                      <button className="ghost-button" type="button" onClick={() => addDraftRows()}>
-                        <Plus size={16} />
-                        줄 추가
+                      <button className="ghost-button" onClick={openExportMode} type="button">
+                        <Download size={16} />
+                        현재 내용 다시 불러오기
                       </button>
-                      <button className="ghost-button" type="button" onClick={handleAddSampleWords}>
-                        샘플 넣기
+                      <button className="primary-button" onClick={downloadMarkdownFile} type="button">
+                        <Download size={16} />
+                        Markdown 다운로드
                       </button>
-                      <button className="primary-button" type="button" onClick={handleSaveDraftRows}>
-                        단어 저장
+                      <button className="icon-button" onClick={openSheetMode} type="button" aria-label="편집으로 돌아가기" title="편집으로 돌아가기">
+                        <X size={16} />
                       </button>
                     </div>
                   </div>
+                  <textarea
+                    className="markdown-editor"
+                    value={markdown}
+                    onChange={(event) => setMarkdown(event.target.value)}
+                    aria-label="내보내기 Markdown"
+                  />
+                </section>
+              )}
 
-                  <div className="sheet-grid excel-sheet" role="table" aria-label="단어 추가 및 삭제표">
-                    <div className="sheet-row sheet-columns" role="row">
-                      <span />
-                      <span>A</span>
-                      <span>B</span>
-                      <span>C</span>
-                      <span>D</span>
-                    </div>
-                    <div className="sheet-row sheet-head" role="row">
-                      <span>#</span>
-                      <span>질문</span>
-                      <span>답변</span>
-                      <span>최근 학습</span>
-                      <span>관리</span>
-                    </div>
-                    {activeWordbook.words.map((word, index) => {
-                      const rowId = `saved-${word.id}`;
-                      return (
-                      <div className="sheet-row saved-sheet-row" role="row" key={word.id}>
-                        <span>{index + 1}</span>
-                        <span className={sheetCellClass(rowId, "question")} onClick={() => selectSheetCell(rowId, "question")}>{word.key}</span>
-                        <span className={sheetCellClass(rowId, "answer")} onClick={() => selectSheetCell(rowId, "answer")}>{word.value}</span>
-                        <span className="sheet-cell muted-cell" onClick={() => setSelectedCell(null)}>{word.lastViewedAt ? new Date(word.lastViewedAt).toLocaleString() : "-"}</span>
-                        <span className="sheet-action-cell">
-                          <button className="icon-button" onClick={() => handleDeleteWord(word.id)} aria-label={`${word.key} 삭제`} title="삭제">
-                            <Trash2 size={16} />
-                          </button>
-                        </span>
-                      </div>
-                      );
-                    })}
-                    {draftRows.map((row, index) => {
-                      const rowId = `draft-${index}`;
-                      return (
-                      <div className="sheet-row draft-sheet-row" role="row" key={index}>
-                        <span>{activeWordbook.words.length + index + 1}</span>
-                        <input
-                          className={sheetCellClass(rowId, "question", "sheet-input")}
-                          value={row.question}
-                          onChange={(event) => updateDraftRow(index, "question", event.target.value)}
-                          onFocus={() => selectSheetCell(rowId, "question")}
-                          onPaste={(event) => handleDraftPaste(event, index, "question")}
-                          placeholder={index === 0 ? "apple" : ""}
-                          aria-label={`질문 ${index + 1}`}
-                        />
-                        <input
-                          className={sheetCellClass(rowId, "answer", "sheet-input")}
-                          value={row.answer}
-                          onChange={(event) => updateDraftRow(index, "answer", event.target.value)}
-                          onFocus={() => selectSheetCell(rowId, "answer")}
-                          onPaste={(event) => handleDraftPaste(event, index, "answer")}
-                          placeholder={index === 0 ? "사과" : ""}
-                          aria-label={`답변 ${index + 1}`}
-                        />
-                        <span className="sheet-cell muted-cell" onClick={() => setSelectedCell(null)}>새 단어</span>
-                        <span className="sheet-action-cell">
-                          <button className="icon-button" onClick={() => clearDraftRow(index)} aria-label={`입력 ${index + 1} 지우기`} title="입력 지우기" type="button">
-                            <Trash2 size={16} />
-                          </button>
-                        </span>
-                      </div>
-                      );
-                    })}
-                    {Array.from({ length: BLANK_SHEET_ROW_COUNT }, (_, index) => (
-                      <div className="sheet-row blank-sheet-row" role="row" key={`blank-${index}`} aria-hidden="true">
-                        <span>{activeWordbook.words.length + draftRows.length + index + 1}</span>
-                        <span />
-                        <span />
-                        <span />
-                        <span />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </section>
-
-              <section className="panel import-panel">
-                <div className="panel-heading">
-                  <h2>파일 가져오기</h2>
-                  <div className="button-group">
-                    <button className="ghost-button" onClick={handleImport} type="button">
-                      <Upload size={16} />
-                      가져오기
-                    </button>
-                    <button className="ghost-button" onClick={handleExport} type="button">
-                      <Download size={16} />
-                      내보내기
-                    </button>
-                  </div>
-                </div>
-                <textarea
-                  value={markdown}
-                  onChange={(event) => setMarkdown(event.target.value)}
-                  placeholder="| question | answer | lastViewedAt |"
-                  aria-label="Markdown 가져오기 내보내기"
-                />
-                {message && <p className="status-line">{message}</p>}
-              </section>
             </div>
+            {importModalOpen && (
+              <div className="modal-backdrop">
+                <section className="modal-panel import-panel import-modal" role="dialog" aria-modal="true" aria-label="파일 가져오기">
+                  <div className="panel-heading file-heading">
+                    <div>
+                      <p className="eyebrow">Markdown Import</p>
+                      <h2>파일 가져오기</h2>
+                    </div>
+                    <button className="icon-button" onClick={closeImportModal} type="button" aria-label="파일 가져오기 닫기" title="파일 가져오기 닫기">
+                      <X size={16} />
+                    </button>
+                  </div>
+
+                  <div className="import-source-tabs" aria-label="가져오기 위치">
+                    <button className={importSource === "local" ? "active" : ""} type="button" onClick={() => setImportSource("local")}>
+                      로컬 파일
+                    </button>
+                    <button className={importSource === "google-drive" ? "active" : ""} type="button" onClick={() => setImportSource("google-drive")}>
+                      Google Drive
+                    </button>
+                  </div>
+
+                  <div className="import-controls">
+                    {importSource === "local" ? (
+                      <label className="file-picker-label">
+                        <span>로컬 Markdown 파일</span>
+                        <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" onChange={handleLocalFileChange} aria-label="로컬 Markdown 파일" />
+                      </label>
+                    ) : (
+                      <div className="drive-picker-box">
+                        <button className="ghost-button" type="button" onClick={handleGoogleDrivePick} disabled={googleDriveLoading}>
+                          <Upload size={16} />
+                          {googleDriveLoading ? "Google Drive 여는 중..." : "Google Drive에서 선택"}
+                        </button>
+                        {!hasGoogleDriveConfig() && (
+                          <p className="status-line">
+                            Google Cloud 설정 후 사용할 수 있습니다. 이미 Google에 로그인되어 있으면 계정 선택/권한 확인 뒤 Drive 파일 선택창이 열립니다.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    <label className="import-name-field">
+                      <span>새 암기장 이름</span>
+                      <input
+                        value={importWordbookName}
+                        onChange={(event) => setImportWordbookName(event.target.value)}
+                        placeholder="예: 여행 영어 표현"
+                        aria-label="새 암기장 이름"
+                      />
+                    </label>
+                  </div>
+
+                  <textarea
+                    className="markdown-editor"
+                    value={markdown}
+                    onChange={(event) => setMarkdown(event.target.value)}
+                    placeholder="| question | answer | lastViewedAt |"
+                    aria-label="가져오기 Markdown"
+                  />
+                  <div className="import-footer">
+                    <p className={importValidation.error ? "form-error" : "status-line"}>
+                      {importValidation.error || `${importValidation.count}개 단어를 새 암기장으로 만들 수 있습니다.`}
+                    </p>
+                    <button className="primary-button" onClick={createWordbookFromMarkdown} type="button" disabled={Boolean(importValidation.error)}>
+                      새 암기장 만들기
+                    </button>
+                  </div>
+                </section>
+              </div>
+            )}
           </section>
         )}
 

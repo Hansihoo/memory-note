@@ -27,7 +27,7 @@ def get_current_user(
 def get_user_wordbook(db: Session, user: User, wordbook_id: int) -> Wordbook:
     wordbook = (
         db.query(Wordbook)
-        .filter(Wordbook.id == wordbook_id, Wordbook.user_id == user.id)
+        .filter(Wordbook.id == wordbook_id, Wordbook.user_id == user.id, Wordbook.deleted_at.is_(None))
         .first()
     )
     if wordbook is None:
@@ -36,7 +36,12 @@ def get_user_wordbook(db: Session, user: User, wordbook_id: int) -> Wordbook:
 
 
 def get_user_word(db: Session, user: User, word_id: int) -> Word:
-    word = db.query(Word).join(Wordbook).filter(Word.id == word_id, Wordbook.user_id == user.id).first()
+    word = (
+        db.query(Word)
+        .join(Wordbook)
+        .filter(Word.id == word_id, Wordbook.user_id == user.id, Wordbook.deleted_at.is_(None), Word.deleted_at.is_(None))
+        .first()
+    )
     if word is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Word not found")
     return word

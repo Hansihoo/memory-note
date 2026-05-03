@@ -25,6 +25,7 @@
     "api:typecheck": "python -m mypy apps/api/app",
     "api:test": "python -m pytest apps/api/tests",
     "api:install": "python -m pip install -r apps/api/requirements.txt",
+    "api:migrate": "python apps/api/scripts/migrate.py",
     "logs": "echo API logs are printed by the running api:dev process. Use logs:debug to enable scoped debug flags.",
     "logs:debug": "echo Set LOG_LEVEL=debug and feature flags such as DEBUG_IMPORT=true, DEBUG_SESSION=true, DEBUG_PROGRESS=true, DEBUG_AUTH=true before running dev.",
     "logs:off": "echo Default logging is warn-level with feature debug flags disabled.",

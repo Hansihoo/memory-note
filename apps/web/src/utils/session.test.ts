@@ -8,7 +8,9 @@ const word = (id: string, key: string, value: string, lastViewedAt: string | nul
   value,
   lastViewedAt,
   createdAt: `2026-05-0${id}T00:00:00.000Z`,
-  updatedAt: `2026-05-0${id}T00:00:00.000Z`
+  updatedAt: `2026-05-0${id}T00:00:00.000Z`,
+  deletedAt: null,
+  syncRevision: Number(id)
 });
 
 describe("session helpers", () => {

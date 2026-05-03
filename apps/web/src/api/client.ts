@@ -10,6 +10,11 @@ export const API_BASE_URL = (envBaseUrl?.trim() || DEFAULT_API_BASE_URL).replace
 interface ServerUser {
   id: number;
   username: string;
+  email?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  authProvider?: string;
+  syncRevision?: number;
 }
 
 interface ServerToken {
@@ -22,6 +27,8 @@ interface ServerWordbook {
   name: string;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
+  syncRevision: number;
   wordCount?: number;
 }
 
@@ -33,6 +40,14 @@ interface ServerWord {
   lastViewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  deletedAt: string | null;
+  syncRevision: number;
+}
+
+interface ServerSyncPull {
+  serverRevision: number;
+  wordbooks: ServerWordbook[];
+  words: ServerWord[];
 }
 
 interface ServerProfileSummary {
@@ -84,7 +99,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 function mapUser(user: ServerUser): UserProfile {
-  return { id: String(user.id), displayName: user.username };
+  return { id: String(user.id), displayName: user.displayName || user.username };
 }
 
 function mapWord(word: ServerWord): Word {
@@ -95,7 +110,9 @@ function mapWord(word: ServerWord): Word {
     value: word.value,
     lastViewedAt: word.lastViewedAt,
     createdAt: word.createdAt,
-    updatedAt: word.updatedAt
+    updatedAt: word.updatedAt,
+    deletedAt: word.deletedAt ?? null,
+    syncRevision: word.syncRevision ?? 0
   };
 }
 
@@ -105,8 +122,21 @@ function mapWordbook(wordbook: ServerWordbook, words: Word[] = []): Wordbook {
     name: wordbook.name,
     words,
     createdAt: wordbook.createdAt,
-    updatedAt: wordbook.updatedAt
+    updatedAt: wordbook.updatedAt,
+    deletedAt: wordbook.deletedAt ?? null,
+    syncRevision: wordbook.syncRevision ?? 0
   };
+}
+
+function mapSyncWordbooks(sync: ServerSyncPull): Wordbook[] {
+  const wordsByWordbook = new Map<string, Word[]>();
+  for (const word of sync.words.map(mapWord).filter((word) => !word.deletedAt)) {
+    const key = word.wordbookId ?? "";
+    wordsByWordbook.set(key, [...(wordsByWordbook.get(key) ?? []), word]);
+  }
+  return sync.wordbooks
+    .map((wordbook) => mapWordbook(wordbook, wordsByWordbook.get(String(wordbook.id)) ?? []))
+    .filter((wordbook) => !wordbook.deletedAt);
 }
 
 function mapProfile(summary: ServerProfileSummary): ProfileSummary {
@@ -151,6 +181,14 @@ export const apiClient = {
       return this.register(payload);
     }
   },
+  async loginWithGoogle(idToken: string) {
+    const result = await request<ServerToken>("/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ idToken })
+    });
+    setToken(result.token);
+    return mapUser(result.user);
+  },
   async logout() {
     try {
       await request<void>("/auth/logout", { method: "POST" });
@@ -167,6 +205,9 @@ export const apiClient = {
     return Promise.all(
       wordbooks.map(async (wordbook) => mapWordbook(wordbook, await this.listWords(String(wordbook.id))))
     );
+  },
+  async syncPull(sinceRevision = 0) {
+    return mapSyncWordbooks(await request<ServerSyncPull>(`/sync/pull?sinceRevision=${sinceRevision}`));
   },
   async createWordbook(name: string) {
     const wordbook = await request<ServerWordbook>("/wordbooks", {
