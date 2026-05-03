@@ -336,6 +336,10 @@ function hasGoogleDriveConfig(): boolean {
   return Boolean(googleDriveConfig.clientId && googleDriveConfig.apiKey && googleDriveConfig.appId);
 }
 
+function hasGoogleLoginConfig(): boolean {
+  return Boolean(googleDriveConfig.clientId);
+}
+
 function sanitizeFileName(name: string): string {
   const sanitized = name.trim().replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ");
   return sanitized || "wordbook";
@@ -528,6 +532,7 @@ export function App() {
   const activeWordbook = wordbooks.find((wordbook) => wordbook.id === activeWordbookId) ?? wordbooks[0] ?? null;
   const currentCard = session ? getCurrentCard(session) : null;
   const importValidation = useMemo(() => validateMarkdownImport(markdown), [markdown]);
+  const googleLoginAvailable = hasGoogleLoginConfig();
   const recentWordbooks = useMemo(
     () =>
       summary.recentWordbooks.length > 0
@@ -1058,10 +1063,14 @@ export function App() {
             <p className="eyebrow">Memory Assistant</p>
             <h1>어학 단어 학습</h1>
           </div>
-          <button className="primary-button google-login-button" type="button" onClick={handleGoogleLogin}>
-            Google로 시작하기
-          </button>
-          <div className="login-divider">아이디로 시작하기</div>
+          {googleLoginAvailable && (
+            <>
+              <button className="primary-button google-login-button" type="button" onClick={handleGoogleLogin}>
+                Google로 시작하기
+              </button>
+              <div className="login-divider">아이디로 시작하기</div>
+            </>
+          )}
           <div className="password-auth-tabs" aria-label="아이디 인증 방식">
             <button
               className={passwordAuthMode === "login" ? "active" : ""}

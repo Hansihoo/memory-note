@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("creates a wordbook, imports markdown, and studies one card", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("button", { name: "Google로 시작하기" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Google로 시작하기" })).toHaveCount(0);
   await page.getByRole("button", { name: "가입" }).click();
   const username = `demo-${Date.now()}`;
   await page.getByLabel("표시 이름 또는 아이디").fill(username);

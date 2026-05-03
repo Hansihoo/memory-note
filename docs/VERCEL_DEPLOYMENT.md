@@ -2,11 +2,18 @@
 
 This project deploys as two Vercel projects:
 
-- API project: `memory-assistant-api`, root directory `apps/api`
-- Web project: `memory-assistant-web`, root directory `apps/web`
+- API project: `memory-note-api`, root directory `apps/api`
+- Web project: `memory-note-web`, root directory `apps/web`
 
 The API stores account and wordbook data in Neon Postgres through `DATABASE_URL`.
-The first production pass uses username/password auth. Google login is optional and can stay disabled until a Google OAuth Client ID is ready.
+The first production pass uses username/password auth. Google login is optional and can stay disabled until a Google OAuth Client ID is ready. When `VITE_GOOGLE_CLIENT_ID` is empty, the web login screen hides the Google login button and shows username/password as the primary flow.
+
+Current production domains:
+
+```text
+API: https://memory-note-api.vercel.app
+Web: https://memory-note-web.vercel.app
+```
 
 ## 1. API Project
 
@@ -27,7 +34,7 @@ Required API environment variables:
 
 ```env
 DATABASE_URL=<vercel-neon-pooled-database-url>
-CORS_ORIGINS=https://<web-project-domain>.vercel.app,http://localhost:5173,http://127.0.0.1:5173
+CORS_ORIGINS=https://memory-note-web.vercel.app,http://localhost:5173,http://127.0.0.1:5173
 LOG_LEVEL=warn
 AUTH_TOKEN_TTL_HOURS=168
 DEBUG_IMPORT=false
@@ -85,7 +92,7 @@ Framework Preset: Vite
 Required web environment variables:
 
 ```env
-VITE_API_BASE_URL=https://<api-project-domain>.vercel.app
+VITE_API_BASE_URL=https://memory-note-api.vercel.app
 VITE_GOOGLE_CLIENT_ID=
 VITE_GOOGLE_API_KEY=
 VITE_GOOGLE_APP_ID=
