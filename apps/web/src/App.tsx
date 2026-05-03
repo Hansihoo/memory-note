@@ -507,7 +507,7 @@ export function App() {
   const [summary, setSummary] = useState<ProfileSummary>(emptyProfile);
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
-  const [passwordAuthMode, setPasswordAuthMode] = useState<PasswordAuthMode>("login");
+  const [passwordAuthMode, setPasswordAuthMode] = useState<PasswordAuthMode>("register");
   const [authError, setAuthError] = useState("");
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [activeWordbookId, setActiveWordbookId] = useState("");
@@ -1058,52 +1058,98 @@ export function App() {
   if (!profile) {
     return (
       <main className="login-screen">
-        <form className="login-panel" onSubmit={handleLogin} aria-label="로그인">
-          <div>
-            <p className="eyebrow">Memory Assistant</p>
-            <h1>어학 단어 학습</h1>
-          </div>
-          {googleLoginAvailable && (
-            <>
-              <button className="primary-button google-login-button" type="button" onClick={handleGoogleLogin}>
-                Google로 시작하기
+        <section className="login-layout" aria-label="Memory Note 시작하기">
+          <section className="login-hero" aria-label="서비스 소개">
+            <div className="login-brand">
+              <span className="brand-mark"><BookOpen size={20} /></span>
+              <span>Memory Note</span>
+            </div>
+            <div className="login-copy">
+              <p className="eyebrow">Vocabulary learning</p>
+              <h1>오늘 외울 표현을 바로 시작하세요</h1>
+              <p>가입하면 해외 여행 필수 영단어와 영어문장 암기장이 자동으로 준비됩니다.</p>
+            </div>
+            <div className="login-preview" aria-label="샘플 암기장 미리보기">
+              <div className="preview-row">
+                <span>airport</span>
+                <strong>공항</strong>
+              </div>
+              <div className="preview-row">
+                <span>boarding pass</span>
+                <strong>탑승권</strong>
+              </div>
+              <div className="preview-row muted-preview">
+                <span>Could you help me find my boarding gate?</span>
+                <strong>탑승구 찾는 것을 도와주실 수 있나요?</strong>
+              </div>
+            </div>
+            <ul className="login-benefits" aria-label="주요 기능">
+              <li><Check size={16} /> 단어장과 문장을 계정에 저장</li>
+              <li><Check size={16} /> 질문과 답을 번갈아 보며 암기</li>
+              <li><Check size={16} /> Markdown 가져오기와 내보내기 지원</li>
+            </ul>
+          </section>
+
+          <form className="login-panel" onSubmit={handleLogin} aria-label="로그인">
+            <div className="auth-heading">
+              <p className="eyebrow">{passwordAuthMode === "register" ? "Create account" : "Welcome back"}</p>
+              <h2>{passwordAuthMode === "register" ? "무료로 시작하기" : "다시 학습하기"}</h2>
+              <p>{passwordAuthMode === "register" ? "계정을 만들고 기본 암기장을 바로 받아보세요." : "저장된 암기장과 학습 기록을 불러옵니다."}</p>
+            </div>
+            {googleLoginAvailable && (
+              <>
+                <button className="primary-button google-login-button" type="button" onClick={handleGoogleLogin}>
+                  Google로 시작하기
+                </button>
+                <div className="login-divider">아이디로 계속하기</div>
+              </>
+            )}
+            <div className="password-auth-tabs" aria-label="아이디 인증 방식">
+              <button
+                className={passwordAuthMode === "login" ? "active" : ""}
+                type="button"
+                onClick={() => {
+                  setPasswordAuthMode("login");
+                  setAuthError("");
+                }}
+              >
+                로그인
               </button>
-              <div className="login-divider">아이디로 시작하기</div>
-            </>
-          )}
-          <div className="password-auth-tabs" aria-label="아이디 인증 방식">
-            <button
-              className={passwordAuthMode === "login" ? "active" : ""}
-              type="button"
-              onClick={() => {
-                setPasswordAuthMode("login");
-                setAuthError("");
-              }}
-            >
-              로그인
-            </button>
-            <button
-              className={passwordAuthMode === "register" ? "active" : ""}
-              type="button"
-              onClick={() => {
-                setPasswordAuthMode("register");
-                setAuthError("");
-              }}
-            >
-              가입
-            </button>
-          </div>
-          <label>
-            표시 이름 또는 아이디
-            <input value={loginName} onChange={(event) => setLoginName(event.target.value)} autoComplete="username" />
-          </label>
-          <label>
-            비밀번호
-            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="current-password" />
-          </label>
-          {authError && <p className="form-error">{authError}</p>}
-          <button className="ghost-button" type="submit">{passwordAuthMode === "register" ? "가입하기" : "로그인하기"}</button>
-        </form>
+              <button
+                className={passwordAuthMode === "register" ? "active" : ""}
+                type="button"
+                onClick={() => {
+                  setPasswordAuthMode("register");
+                  setAuthError("");
+                }}
+              >
+                가입
+              </button>
+            </div>
+            <label className="auth-field">
+              표시 이름 또는 아이디
+              <input
+                value={loginName}
+                onChange={(event) => setLoginName(event.target.value)}
+                autoComplete="username"
+                placeholder="예: travel-learner"
+              />
+            </label>
+            <label className="auth-field">
+              비밀번호
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                autoComplete={passwordAuthMode === "register" ? "new-password" : "current-password"}
+                placeholder="8자 이상 입력"
+              />
+            </label>
+            {authError && <p className="form-error">{authError}</p>}
+            <button className="primary-button auth-submit" type="submit">{passwordAuthMode === "register" ? "가입하기" : "로그인하기"}</button>
+            <p className="auth-note">{passwordAuthMode === "register" ? "가입 후 샘플 암기장 2개가 자동으로 생성됩니다." : "처음이라면 가입 탭에서 새 암기장을 시작하세요."}</p>
+          </form>
+        </section>
       </main>
     );
   }

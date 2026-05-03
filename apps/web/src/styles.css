@@ -31,27 +31,179 @@ button {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 24px;
-  background: #a96532 url("./assets/user-wood-table.png") center / cover no-repeat;
+  padding: 32px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.56)),
+    #a96532 url("./assets/user-wood-table.png") center / cover no-repeat;
+}
+
+.login-layout {
+  width: min(1040px, 100%);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+  align-items: center;
+  gap: 28px;
+}
+
+.login-hero {
+  display: grid;
+  gap: 26px;
+  color: #172033;
+}
+
+.login-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #18233a;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #3559e0;
+  color: #ffffff;
+  box-shadow: 0 10px 22px rgba(53, 89, 224, 0.22);
+}
+
+.login-copy {
+  display: grid;
+  gap: 12px;
+  max-width: 620px;
+}
+
+.login-copy h1 {
+  margin: 0;
+  max-width: 580px;
+  color: #172033;
+  font-size: 46px;
+  line-height: 1.08;
+  font-weight: 900;
+}
+
+.login-copy p:not(.eyebrow) {
+  margin: 0;
+  max-width: 520px;
+  color: #4b5870;
+  font-size: 18px;
+  line-height: 1.6;
+  font-weight: 700;
+}
+
+.login-preview {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(84, 98, 128, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 22px 48px rgba(37, 28, 20, 0.16);
+}
+
+.preview-row {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.72fr);
+  align-items: center;
+  gap: 18px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #edf1f7;
+}
+
+.preview-row:last-child {
+  border-bottom: 0;
+}
+
+.preview-row span,
+.preview-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-row span {
+  color: #172033;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.preview-row strong {
+  color: #3559e0;
+  font-size: 15px;
+  text-align: right;
+}
+
+.muted-preview {
+  background: #f7f9fc;
+}
+
+.login-benefits {
+  width: min(520px, 100%);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: #29354d;
+  font-weight: 800;
+}
+
+.login-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.login-benefits svg {
+  color: #14a36d;
+  flex: 0 0 auto;
 }
 
 .login-panel {
-  width: min(420px, 100%);
   display: grid;
-  gap: 16px;
-  padding: 28px;
-  border: 1px solid rgba(81, 55, 36, 0.18);
+  gap: 18px;
+  padding: 30px;
+  border: 1px solid rgba(84, 98, 128, 0.18);
   border-radius: 8px;
-  background: #fffaf0;
-  box-shadow: 0 28px 70px rgba(27, 16, 9, 0.34);
+  background: #ffffff;
+  box-shadow: 0 28px 70px rgba(27, 16, 9, 0.2);
 }
 
 .login-panel h1,
+.login-panel h2,
 .panel-heading h2,
 .wordbook-create h2,
 .profile-home h1,
 .study-header h1 {
   margin: 0;
+}
+
+.auth-heading {
+  display: grid;
+  gap: 7px;
+}
+
+.auth-heading h2 {
+  color: #172033;
+  font-size: 27px;
+  line-height: 1.2;
+}
+
+.auth-heading p:not(.eyebrow),
+.auth-note {
+  margin: 0;
+  color: #66728a;
+  font-size: 14px;
+  line-height: 1.55;
+  font-weight: 700;
 }
 
 .google-login-button {
@@ -78,22 +230,26 @@ button {
 .password-auth-tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 0;
+  padding: 4px;
+  border: 1px solid #dce3ee;
+  border-radius: 8px;
+  background: #f6f8fc;
 }
 
 .password-auth-tabs button {
-  min-height: 38px;
-  border: 1px solid rgba(87, 61, 41, 0.22);
+  min-height: 42px;
+  border: 0;
   border-radius: 6px;
-  background: #fffaf0;
-  color: #2b3340;
+  background: transparent;
+  color: #5a667d;
   font-weight: 800;
 }
 
 .password-auth-tabs button.active {
-  border-color: #1f6f78;
-  background: #eaf8f7;
-  color: #1f6f78;
+  background: #ffffff;
+  color: #3559e0;
+  box-shadow: 0 5px 14px rgba(33, 44, 70, 0.11);
 }
 
 .eyebrow {
@@ -110,6 +266,27 @@ label {
   color: #3b4352;
   font-size: 13px;
   font-weight: 700;
+}
+
+.auth-field {
+  gap: 8px;
+  color: #29354d;
+  font-size: 14px;
+}
+
+.auth-field input {
+  height: 48px;
+  border-color: #cfd8e8;
+  border-radius: 8px;
+  padding: 0 14px;
+  font-weight: 700;
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 8px;
+  font-size: 15px;
 }
 
 input,
@@ -969,9 +1146,51 @@ textarea:focus {
   .edit-grid {
     grid-template-columns: 1fr;
   }
+
+  .login-layout {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .login-hero {
+    gap: 18px;
+  }
+
+  .login-copy h1 {
+    font-size: 38px;
+  }
 }
 
 @media (max-width: 760px) {
+  .login-screen {
+    padding: 18px;
+  }
+
+  .login-layout {
+    gap: 18px;
+  }
+
+  .login-copy h1 {
+    font-size: 32px;
+  }
+
+  .login-copy p:not(.eyebrow) {
+    font-size: 15px;
+  }
+
+  .login-panel {
+    padding: 22px;
+  }
+
+  .preview-row {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .preview-row strong {
+    text-align: left;
+  }
+
   .study-home,
   .edit-home,
   .profile-home,
