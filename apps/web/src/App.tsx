@@ -1065,23 +1065,11 @@ export function App() {
               <span>Memory Note</span>
             </div>
             <div className="login-copy">
-              <p className="eyebrow">Vocabulary learning</p>
-              <h1>오늘 외울 표현을 바로 시작하세요</h1>
-              <p>가입하면 해외 여행 필수 영단어와 영어문장 암기장이 자동으로 준비됩니다.</p>
-            </div>
-            <div className="login-preview" aria-label="샘플 암기장 미리보기">
-              <div className="preview-row">
-                <span>airport</span>
-                <strong>공항</strong>
-              </div>
-              <div className="preview-row">
-                <span>boarding pass</span>
-                <strong>탑승권</strong>
-              </div>
-              <div className="preview-row muted-preview">
-                <span>Could you help me find my boarding gate?</span>
-                <strong>탑승구 찾는 것을 도와주실 수 있나요?</strong>
-              </div>
+              <h1>
+                <span>가장 쉬운 암기 방법.</span>
+                <span>무료로 시작하세요.</span>
+              </h1>
+              <p>해외 여행 필수 영단어와 영어문장을 계정에 저장하고 어디서든 이어서 학습하세요.</p>
             </div>
             <ul className="login-benefits" aria-label="주요 기능">
               <li><Check size={16} /> 단어장과 문장을 계정에 저장</li>
@@ -1091,6 +1079,28 @@ export function App() {
           </section>
 
           <form className="login-panel" onSubmit={handleLogin} aria-label="로그인">
+            <div className="password-auth-tabs" aria-label="가입 또는 로그인 선택">
+              <button
+                className={passwordAuthMode === "register" ? "active" : ""}
+                type="button"
+                onClick={() => {
+                  setPasswordAuthMode("register");
+                  setAuthError("");
+                }}
+              >
+                가입
+              </button>
+              <button
+                className={passwordAuthMode === "login" ? "active" : ""}
+                type="button"
+                onClick={() => {
+                  setPasswordAuthMode("login");
+                  setAuthError("");
+                }}
+              >
+                로그인
+              </button>
+            </div>
             <div className="auth-heading">
               <p className="eyebrow">{passwordAuthMode === "register" ? "Create account" : "Welcome back"}</p>
               <h2>{passwordAuthMode === "register" ? "무료로 시작하기" : "다시 학습하기"}</h2>
@@ -1104,30 +1114,8 @@ export function App() {
                 <div className="login-divider">아이디로 계속하기</div>
               </>
             )}
-            <div className="password-auth-tabs" aria-label="아이디 인증 방식">
-              <button
-                className={passwordAuthMode === "login" ? "active" : ""}
-                type="button"
-                onClick={() => {
-                  setPasswordAuthMode("login");
-                  setAuthError("");
-                }}
-              >
-                로그인
-              </button>
-              <button
-                className={passwordAuthMode === "register" ? "active" : ""}
-                type="button"
-                onClick={() => {
-                  setPasswordAuthMode("register");
-                  setAuthError("");
-                }}
-              >
-                가입
-              </button>
-            </div>
             <label className="auth-field">
-              표시 이름 또는 아이디
+              아이디
               <input
                 value={loginName}
                 onChange={(event) => setLoginName(event.target.value)}

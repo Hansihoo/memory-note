@@ -70,7 +70,7 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "무료로 시작하기" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "가입하기" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "가입" }));
-    await userEvent.type(screen.getByLabelText("표시 이름 또는 아이디"), "demo-learner");
+    await userEvent.type(screen.getByLabelText("아이디"), "demo-learner");
     await userEvent.type(screen.getByLabelText("비밀번호"), "password123");
     await userEvent.click(screen.getByRole("button", { name: "가입하기" }));
 

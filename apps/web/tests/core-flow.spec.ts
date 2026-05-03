@@ -7,7 +7,7 @@ test("creates a wordbook, imports markdown, and studies one card", async ({ page
   await expect(page.getByRole("heading", { name: "무료로 시작하기" })).toBeVisible();
   await page.getByRole("button", { name: "가입", exact: true }).click();
   const username = `demo-${Date.now()}`;
-  await page.getByLabel("표시 이름 또는 아이디").fill(username);
+  await page.getByLabel("아이디").fill(username);
   await page.getByLabel("비밀번호").fill("password123");
   await page.getByRole("button", { name: "가입하기" }).click();
   await expect(page.getByRole("navigation", { name: "상단 메뉴" })).toBeVisible();
