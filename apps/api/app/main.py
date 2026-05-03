@@ -2,13 +2,14 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .config import get_cors_origins
+from .config import get_cors_origins, is_database_configured
 from .database import get_db, init_db
 from .deps import get_current_user, get_user_word, get_user_wordbook
 from .google_auth import verify_google_id_token
@@ -58,7 +59,19 @@ def create_app() -> FastAPI:
 
     @api.on_event("startup")
     def on_startup() -> None:
-        init_db()
+        if not is_database_configured():
+            logger.warning("database_startup_init_skipped reason=missing_DATABASE_URL")
+            return
+
+        try:
+            init_db()
+        except Exception:
+            logger.exception("database_startup_init_failed")
+
+    @api.exception_handler(Exception)
+    async def log_unhandled_exception(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("unhandled_request_error method=%s path=%s", request.method, request.url.path)
+        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"detail": "Internal server error"})
 
     register_routes(api)
     return api

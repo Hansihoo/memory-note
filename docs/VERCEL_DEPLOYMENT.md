@@ -6,6 +6,7 @@ This project deploys as two Vercel projects:
 - Web project: `memory-assistant-web`, root directory `apps/web`
 
 The API stores account and wordbook data in Neon Postgres through `DATABASE_URL`.
+The first production pass uses username/password auth. Google login is optional and can stay disabled until a Google OAuth Client ID is ready.
 
 ## 1. API Project
 
@@ -24,7 +25,6 @@ Required API environment variables:
 
 ```env
 DATABASE_URL=<vercel-neon-pooled-database-url>
-GOOGLE_CLIENT_ID=<google-web-oauth-client-id>
 CORS_ORIGINS=https://<web-project-domain>.vercel.app,http://localhost:5173,http://127.0.0.1:5173
 LOG_LEVEL=warn
 AUTH_TOKEN_TTL_HOURS=168
@@ -33,6 +33,15 @@ DEBUG_SESSION=false
 DEBUG_PROGRESS=false
 DEBUG_AUTH=false
 ```
+
+Optional API environment variables:
+
+```env
+GOOGLE_CLIENT_ID=<google-web-oauth-client-id>
+JWT_SECRET=
+```
+
+`JWT_SECRET` is not used by the current bearer-token implementation. It can remain set in Vercel without affecting the app.
 
 After deployment, verify:
 
@@ -45,6 +54,22 @@ Expected response:
 ```json
 {"status":"ok"}
 ```
+
+`/health` does not require `DATABASE_URL`. If `DATABASE_URL` is missing, DB-backed routes such as `/auth/register` return `503` and Vercel logs include `database_configuration_missing`.
+
+### Neon migration
+
+When `DATABASE_URL` is present, the API initializes tables on startup and before the first DB-backed request. For a fresh Neon database, redeploying the API after connecting Neon is enough.
+
+Optional manual migration from local PowerShell:
+
+```powershell
+$env:DATABASE_URL="<vercel-neon-pooled-database-url>"
+pnpm run api:migrate
+Remove-Item Env:\DATABASE_URL
+```
+
+Do not paste the Neon URL into logs, screenshots, or committed files.
 
 ## 2. Web Project
 
@@ -59,7 +84,7 @@ Required web environment variables:
 
 ```env
 VITE_API_BASE_URL=https://<api-project-domain>.vercel.app
-VITE_GOOGLE_CLIENT_ID=<google-web-oauth-client-id>
+VITE_GOOGLE_CLIENT_ID=
 VITE_GOOGLE_API_KEY=
 VITE_GOOGLE_APP_ID=
 VITE_DEBUG_IMPORT=false
@@ -67,9 +92,9 @@ VITE_DEBUG_SESSION=false
 VITE_DEBUG_PROGRESS=false
 ```
 
-`VITE_GOOGLE_API_KEY` and `VITE_GOOGLE_APP_ID` are only needed for Google Drive file import. They are not required for Google login.
+`VITE_GOOGLE_CLIENT_ID` is only needed when Google login is enabled. `VITE_GOOGLE_API_KEY` and `VITE_GOOGLE_APP_ID` are only needed for Google Drive file import.
 
-## 3. Google OAuth
+## 3. Google OAuth Optional Setup
 
 Create a Google Cloud Web OAuth Client ID.
 
@@ -92,6 +117,7 @@ Web: VITE_GOOGLE_CLIENT_ID
 API:
 
 ```text
+GET /health
 POST /auth/register
 POST /auth/login
 GET /me
@@ -103,7 +129,7 @@ GET /sync/pull?sinceRevision=0
 Web:
 
 1. Open the deployed web URL.
-2. Sign in with Google.
+2. Sign up with username/password.
 3. Create a wordbook and add words.
 4. Refresh the page.
 5. Confirm the wordbook loads from the server DB.

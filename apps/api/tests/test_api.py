@@ -4,12 +4,50 @@ def test_health(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_health_does_not_require_database_url(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+
+    with TestClient(create_app()) as test_client:
+        response = test_client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_database_routes_report_503_without_database_url(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+
+    with TestClient(create_app()) as test_client:
+        response = test_client.post("/auth/register", json={"username": "learner", "password": "password123"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Database is not configured"
+
+
 def test_cors_origins_are_env_configurable(monkeypatch):
     from app.config import get_cors_origins
 
     monkeypatch.setenv("CORS_ORIGINS", "https://web.example.com, http://localhost:5173")
 
     assert get_cors_origins() == ["https://web.example.com", "http://localhost:5173"]
+
+
+def test_database_url_normalizes_postgres_urls(monkeypatch):
+    from app.config import get_database_url
+
+    monkeypatch.setenv("DATABASE_URL", "postgres://user:pass@example.com/db")
+
+    assert get_database_url() == "postgresql://user:pass@example.com/db"
 
 
 def test_auth_register_login_me_logout(client):

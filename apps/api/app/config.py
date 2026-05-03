@@ -17,6 +17,8 @@ def _strip_env_quotes(value: str) -> str:
 
 
 def _load_local_env() -> None:
+    if os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("VERCEL_URL"):
+        return
     if not ENV_PATH.exists():
         return
 
@@ -33,8 +35,28 @@ def _load_local_env() -> None:
 _load_local_env()
 
 
+def is_vercel_runtime() -> bool:
+    return bool(os.getenv("VERCEL") or os.getenv("VERCEL_ENV") or os.getenv("VERCEL_URL"))
+
+
+def normalize_database_url(database_url: str) -> str:
+    value = database_url.strip()
+    if value.startswith("postgres://"):
+        return f"postgresql://{value[len('postgres://'):]}"
+    return value
+
+
 def get_database_url() -> str:
-    return os.getenv("DATABASE_URL") or f"sqlite:///{DEFAULT_SQLITE_PATH.as_posix()}"
+    configured = normalize_database_url(os.getenv("DATABASE_URL", ""))
+    if configured:
+        return configured
+    if is_vercel_runtime():
+        return ""
+    return f"sqlite:///{DEFAULT_SQLITE_PATH.as_posix()}"
+
+
+def is_database_configured() -> bool:
+    return bool(get_database_url())
 
 
 def get_log_level() -> str:
