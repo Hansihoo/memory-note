@@ -11,8 +11,8 @@ const BLANK_SHEET_ROW_COUNT = 18;
 const DEMO_USERNAME_KEY = "memory-assistant-demo-username";
 const DEMO_PASSWORD = "password123";
 const COMPACT_STUDY_TEXT_LENGTH = 15;
-const SAMPLE_WORDBOOK_NAME = "해외 여행 필수 영단어";
-const SAMPLE_SENTENCE_WORDBOOK_NAME = "해외여행 필수 영어문장";
+const SAMPLE_WORDBOOK_NAME = "암기 노트 기본 단어";
+const SAMPLE_SENTENCE_WORDBOOK_NAME = "암기 노트 기본 문장";
 const LEGACY_SAMPLE_WORDBOOK_NAME = "기본 영어 단어장";
 const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 const GOOGLE_IDENTITY_SCRIPT_URL = "https://accounts.google.com/gsi/client";
@@ -872,7 +872,7 @@ export function App() {
     await apiClient.batchWords(activeWordbook.id, sampleWords);
     const refreshed = await apiClient.listWords(activeWordbook.id);
     setWordbooks((current) => updateWordbookWords(current, activeWordbook.id, () => refreshed));
-    setMessage("해외 여행 필수 영단어 100개를 넣었습니다.");
+    setMessage("암기 노트 기본 단어 100개를 넣었습니다.");
     resetStudySession();
   }
 
@@ -1058,18 +1058,18 @@ export function App() {
   if (!profile) {
     return (
       <main className="login-screen">
-        <section className="login-layout" aria-label="Memory Note 시작하기">
+        <section className="login-layout" aria-label="암기 노트 시작하기">
           <section className="login-hero" aria-label="서비스 소개">
             <div className="login-brand">
               <span className="brand-mark"><BookOpen size={20} /></span>
-              <span>Memory Note</span>
+              <span>암기 노트</span>
             </div>
             <div className="login-copy">
               <h1>
                 <span>가장 쉬운 암기 방법.</span>
                 <span>무료로 시작하세요.</span>
               </h1>
-              <p>해외 여행 필수 영단어와 영어문장을 계정에 저장하고 어디서든 이어서 학습하세요.</p>
+              <p>암기를 위한 노트를 계정에 저장하고 어디서든 이어서 학습하세요.</p>
             </div>
             <ul className="login-benefits" aria-label="주요 기능">
               <li><Check size={16} /> 단어장과 문장을 계정에 저장</li>
@@ -1149,7 +1149,7 @@ export function App() {
           <button className="icon-button" onClick={() => setSidebarOpen((open) => !open)} aria-label={sidebarOpen ? "암기장 목록 숨기기" : "암기장 목록 보이기"}>
             {sidebarOpen ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
           </button>
-          <strong>Memory Assistant</strong>
+          <strong>암기 노트</strong>
         </div>
         <nav className="main-tabs" aria-label="상단 메뉴">
           <button className={homeView === "study" ? "active" : ""} onClick={() => setHomeView("study")}>암기</button>

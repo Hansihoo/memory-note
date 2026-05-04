@@ -53,6 +53,22 @@ button {
     url("./assets/user-wood-table.png") center / cover no-repeat;
 }
 
+.login-hero::after {
+  content: "암기를 위한 노트";
+  position: absolute;
+  left: 50%;
+  bottom: clamp(34px, 5vw, 60px);
+  transform: translateX(-50%) rotate(-2deg);
+  padding: 10px 20px;
+  border-radius: 10px;
+  background: rgba(255, 248, 236, 0.82);
+  color: #5b3c21;
+  font-size: clamp(22px, 2.2vw, 30px);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  box-shadow: 0 14px 30px rgba(16, 9, 4, 0.28);
+}
+
 .login-brand {
   display: inline-flex;
   align-items: center;
@@ -1076,9 +1092,14 @@ textarea:focus {
 }
 
 .primary-button.auth-submit {
-  background: #4255ff;
-  border-color: #4255ff;
+  background: #85512b;
+  border-color: #85512b;
   color: #ffffff;
+}
+
+.primary-button.auth-submit:hover {
+  background: #704324;
+  border-color: #704324;
 }
 
 .primary-button:disabled {
