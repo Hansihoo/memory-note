@@ -507,7 +507,7 @@ export function App() {
   const [summary, setSummary] = useState<ProfileSummary>(emptyProfile);
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
-  const [passwordAuthMode, setPasswordAuthMode] = useState<PasswordAuthMode>("register");
+  const [passwordAuthMode, setPasswordAuthMode] = useState<PasswordAuthMode>("login");
   const [authError, setAuthError] = useState("");
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [activeWordbookId, setActiveWordbookId] = useState("");

@@ -67,8 +67,8 @@ describe("App", () => {
 
     render(<App />);
     expect(screen.queryByRole("button", { name: "Google로 시작하기" })).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "무료로 시작하기" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "가입하기" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "다시 학습하기" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "로그인하기" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "가입" }));
     await userEvent.type(screen.getByLabelText("아이디"), "demo-learner");
     await userEvent.type(screen.getByLabelText("비밀번호"), "password123");
