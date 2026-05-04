@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Word } from "../types";
-import { createStudySession, getCurrentCard, markCurrentViewed, nextCard, revealCurrent } from "./session";
+import { CardStatus, CardType, type Word } from "../types";
+import { createStudySession, createStudySessionFromCards, getCurrentCard, markCurrentViewed, nextCard, revealCurrent } from "./session";
 
 const word = (id: string, key: string, value: string, lastViewedAt: string | null): Word => ({
   id,
@@ -27,6 +27,32 @@ describe("session helpers", () => {
     const session = createStudySession([word("1", "recall", "떠올리다", null)], () => 0.8);
 
     expect(getCurrentCard(session)).toMatchObject({ prompt: "떠올리다", answer: "recall", direction: "value-to-key" });
+  });
+
+  it("uses server card prompt and card type direction", () => {
+    const session = createStudySessionFromCards([
+      {
+        cardId: "card-1",
+        memoryItemId: "item-1",
+        legacyWordId: "1",
+        wordbookId: "book-1",
+        cardType: CardType.BASIC_VALUE_TO_KEY,
+        prompt: "출발",
+        answer: "departure",
+        status: CardStatus.NEW,
+        dueAt: "2026-05-04T00:00:00.000Z",
+        lapses: 0,
+        leechScore: 0
+      }
+    ]);
+
+    expect(getCurrentCard(session)).toMatchObject({
+      cardId: "card-1",
+      cardType: CardType.BASIC_VALUE_TO_KEY,
+      prompt: "출발",
+      answer: "departure",
+      direction: "value-to-key"
+    });
   });
 
   it("reveals and advances without mutating the original session", () => {

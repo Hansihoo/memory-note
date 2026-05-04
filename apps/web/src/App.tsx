@@ -1,10 +1,21 @@
-import { BookOpen, Check, ChevronLeft, ChevronRight, Download, LogOut, Plus, Trash2, Upload, X } from "lucide-react";
+import { BookOpen, Check, ChevronLeft, ChevronRight, Download, LogOut, Plus, Trash2, Upload, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, FormEvent } from "react";
+import { BASIC_REVIEW_RATING_BY_ACTION, StudyPlatform } from "@memory-note/core";
 import { apiClient } from "./api/client";
-import type { ProfileSummary, UserProfile, Word, Wordbook } from "./types";
+import type { ProfileSummary, ReviewRating, UserProfile, Word, Wordbook } from "./types";
 import { parseWordMarkdown, serializeWordsToMarkdown } from "./utils/markdown";
-import { createStudySession, getCurrentCard, nextCard, revealCurrent, type StudySession } from "./utils/session";
+import {
+  cardTypeFromDirection,
+  createStudySession,
+  createStudySessionFromCards,
+  getCurrentCard,
+  markCurrentViewed,
+  nextCard,
+  revealCurrent,
+  type StudySession
+} from "./utils/session";
+import { createBrowserSpeechDriver, detectSpeechLanguage } from "./utils/speech";
 
 const DRAFT_ROW_COUNT = 1;
 const BLANK_SHEET_ROW_COUNT = 18;
@@ -235,6 +246,8 @@ const legacySampleKeys = new Set(["apple", "book", "study", "remember", "listen"
 const emptyProfile: ProfileSummary = {
   cumulativeLearningDays: 0,
   todayStudiedCount: 0,
+  memorizedWordCount: 0,
+  memorizedWords: [],
   recentWordbooks: []
 };
 
@@ -244,7 +257,7 @@ interface DraftRow {
 }
 
 type HomeView = "study" | "edit" | "profile";
-type ReviewState = "question" | "known-reveal" | "unknown-reveal";
+type ReviewState = "question" | "again-reveal" | "hard-reveal" | "good-reveal";
 type SheetColumn = "question" | "answer";
 type EditWorkspaceMode = "sheet" | "export";
 type ImportSource = "local" | "google-drive";
@@ -495,6 +508,11 @@ function updateWordbookWords(wordbooks: Wordbook[], wordbookId: string, updater:
   );
 }
 
+function createClientEventId(cardId: string, rating: ReviewRating): string {
+  const randomId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `web-${cardId}-${rating}-${randomId}`;
+}
+
 function isLegacySampleWordbook(wordbook: Wordbook): boolean {
   return (
     wordbook.name === LEGACY_SAMPLE_WORDBOOK_NAME &&
@@ -523,30 +541,46 @@ export function App() {
   const [googleDriveLoading, setGoogleDriveLoading] = useState(false);
   const [session, setSession] = useState<StudySession | null>(null);
   const [reviewState, setReviewState] = useState<ReviewState>("question");
+  const [studyQueueLoading, setStudyQueueLoading] = useState(false);
   const [selectedCell, setSelectedCell] = useState<SheetSelection | null>(null);
   const [homeView, setHomeView] = useState<HomeView>("study");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [appError, setAppError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [speechEnabled, setSpeechEnabled] = useState(false);
+  const speechDriver = useMemo(() => createBrowserSpeechDriver(), []);
 
   const activeWordbook = wordbooks.find((wordbook) => wordbook.id === activeWordbookId) ?? wordbooks[0] ?? null;
   const currentCard = session ? getCurrentCard(session) : null;
+  const speechAvailable = speechDriver.isAvailable();
   const importValidation = useMemo(() => validateMarkdownImport(markdown), [markdown]);
   const googleLoginAvailable = hasGoogleLoginConfig();
-  const recentWordbooks = useMemo(
-    () =>
-      summary.recentWordbooks.length > 0
-        ? summary.recentWordbooks
-        : wordbooks.slice(0, 4).map((wordbook) => ({
-            wordbookId: wordbook.id,
-            name: wordbook.name,
-            studiedCount: 0,
-            knownCount: 0,
-            unknownCount: 0,
-            lastStudiedAt: null
-          })),
-    [summary.recentWordbooks, wordbooks]
-  );
+  useEffect(() => {
+    if (!speechEnabled || homeView !== "study" || !session || !currentCard) {
+      return undefined;
+    }
+
+    const text = session.revealed ? currentCard.answer : currentCard.prompt;
+    void speechDriver.speak(text, {
+      lang: detectSpeechLanguage(text),
+      rate: 0.92
+    });
+
+    return () => {
+      speechDriver.stop();
+    };
+  }, [
+    currentCard?.answer,
+    currentCard?.direction,
+    currentCard?.prompt,
+    currentCard?.word.id,
+    homeView,
+    session?.index,
+    session?.revealed,
+    session,
+    speechDriver,
+    speechEnabled
+  ]);
 
   async function createWordbookWithWords(name: string, wordsToCreate: Array<Pick<Word, "key" | "value">>): Promise<Wordbook> {
     const wordbook = await apiClient.createWordbook(name);
@@ -634,6 +668,22 @@ export function App() {
       });
   }, [loadAfterAuth]);
 
+  useEffect(() => {
+    if (!profile || !apiClient.hasToken()) {
+      return;
+    }
+
+    window.postMessage(
+      {
+        source: "memory-note-web",
+        type: "MEMORY_NOTE_AUTH_TOKEN",
+        token: apiClient.getToken(),
+        apiBaseUrl: apiClient.getApiBaseUrl()
+      },
+      window.location.origin
+    );
+  }, [profile]);
+
   function resetStudySession() {
     setSession(null);
     setReviewState("question");
@@ -650,18 +700,41 @@ export function App() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+
     if (!activeWordbook || activeWordbook.words.length === 0) {
-      if (session) {
-        resetStudySession();
-      }
-      return;
+      resetStudySession();
+      return () => {
+        cancelled = true;
+      };
     }
 
-    if (!session || !getCurrentCard(session)) {
-      setSession(createStudySession(activeWordbook.words));
-      setReviewState("question");
+    async function loadStudyQueue() {
+      setStudyQueueLoading(true);
+      try {
+        const today = await apiClient.studyToday(activeWordbook.id, Math.max(20, activeWordbook.words.length * 2));
+        if (cancelled) {
+          return;
+        }
+        setSession(today.cards.length > 0 ? createStudySessionFromCards(today.cards) : createStudySession(activeWordbook.words));
+      } catch {
+        if (!cancelled) {
+          setSession(createStudySession(activeWordbook.words));
+        }
+      } finally {
+        if (!cancelled) {
+          setReviewState("question");
+          setStudyQueueLoading(false);
+        }
+      }
     }
-  }, [activeWordbook?.id, activeWordbook?.words.length, session]);
+
+    void loadStudyQueue();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeWordbook?.id, activeWordbook?.words.length]);
 
   async function handleLogin(event: FormEvent) {
     event.preventDefault();
@@ -1017,42 +1090,72 @@ export function App() {
     setReviewState("question");
   }
 
-  async function saveStudyResult(known: boolean) {
-    if (!activeWordbook || !currentCard) {
+  function handleToggleSpeech() {
+    if (!speechAvailable) {
       return;
     }
-    const updated = await apiClient.studyWord(currentCard.word.id, known ? "known" : "unknown");
+
+    setSpeechEnabled((enabled) => {
+      const nextEnabled = !enabled;
+      if (!nextEnabled) {
+        speechDriver.stop();
+      }
+      return nextEnabled;
+    });
+  }
+
+  async function saveStudyResult(rating: ReviewRating) {
+    if (!currentCard) {
+      return;
+    }
+
+    if (currentCard.cardId) {
+      const result = await apiClient.reviewCard(currentCard.cardId, {
+        rating,
+        platform: StudyPlatform.WEB,
+        clientEventId: createClientEventId(currentCard.cardId, rating)
+      });
+      const viewedAt = result.lastReviewedAt ?? new Date().toISOString();
+      if (result.legacyWordId) {
+        setWordbooks((current) =>
+          updateWordbookWords(current, result.wordbookId, (words) => markCurrentViewed(words, result.legacyWordId!, viewedAt))
+        );
+      }
+      await loadSummary();
+      return;
+    }
+
+    if (!activeWordbook) {
+      return;
+    }
+    const updated = await apiClient.studyWord(currentCard.word.id, rating === "AGAIN" ? "unknown" : "known", {
+      cardType: currentCard.cardType ?? cardTypeFromDirection(currentCard.direction),
+      platform: StudyPlatform.WEB,
+      clientEventId: createClientEventId(currentCard.word.id, rating)
+    });
     setWordbooks((current) =>
       updateWordbookWords(current, activeWordbook.id, (words) => words.map((word) => (word.id === updated.id ? updated : word)))
     );
     await loadSummary();
   }
 
-  async function handleKnown() {
+  function handleReview(rating: ReviewRating, revealState: Exclude<ReviewState, "question">) {
     if (!currentCard) {
       return;
     }
-    if (reviewState === "known-reveal") {
-      void saveStudyResult(true).then(goNextCard);
+    if (reviewState === revealState) {
+      void saveStudyResult(rating).then(goNextCard);
       return;
     }
     if (reviewState !== "question") {
       return;
     }
     setSession((current) => (current ? revealCurrent(current) : current));
-    setReviewState("known-reveal");
+    setReviewState(revealState);
   }
 
-  function handleUnknown() {
-    if (!currentCard) {
-      return;
-    }
-    if (reviewState === "unknown-reveal") {
-      void saveStudyResult(false).then(goNextCard);
-      return;
-    }
-    setSession((current) => (current ? revealCurrent(current) : current));
-    setReviewState("unknown-reveal");
+  function isReviewButtonDisabled(revealState: Exclude<ReviewState, "question">): boolean {
+    return reviewState !== "question" && reviewState !== revealState;
   }
 
   if (!profile) {
@@ -1198,6 +1301,7 @@ export function App() {
 
       <section className="home-content">
         {loading && <p className="status-line">불러오는 중...</p>}
+        {studyQueueLoading && !loading && <p className="status-line">오늘 학습 큐를 준비하는 중...</p>}
         {appError && <p className="form-error">{appError}</p>}
         {homeView === "study" && (
           <section className="study-home" aria-label="암기 홈">
@@ -1211,6 +1315,17 @@ export function App() {
             <div className="notebook-stage">
               {currentCard ? (
                 <article className="memory-card notebook-card" aria-label="단어 암기장">
+                  <button
+                    className={speechEnabled ? "icon-button speech-toggle notebook-speech-control active" : "icon-button speech-toggle notebook-speech-control"}
+                    type="button"
+                    onClick={handleToggleSpeech}
+                    aria-label={speechEnabled ? "읽어주기 끄기" : "읽어주기 켜기"}
+                    aria-pressed={speechEnabled}
+                    title={speechAvailable ? (speechEnabled ? "읽어주기 끄기" : "읽어주기 켜기") : "이 브라우저는 읽어주기를 지원하지 않습니다."}
+                    disabled={!speechAvailable}
+                  >
+                    {speechEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                  </button>
                   <section className="notebook-section notebook-question" aria-label="앞면">
                     <strong className={studyTextClassName("study-term", currentCard.prompt)}>{currentCard.prompt}</strong>
                   </section>
@@ -1228,11 +1343,26 @@ export function App() {
             <div className="study-actions">
               {session && currentCard && (
                 <>
-                  <button className="ghost-button large-action" onClick={handleUnknown} disabled={reviewState === "known-reveal"}>
-                    {reviewState === "unknown-reveal" ? "다음" : "모르겠음"}
+                  <button
+                    className="ghost-button large-action"
+                    onClick={() => handleReview(BASIC_REVIEW_RATING_BY_ACTION.again, "again-reveal")}
+                    disabled={isReviewButtonDisabled("again-reveal")}
+                  >
+                    {reviewState === "again-reveal" ? "다음" : "모름"}
                   </button>
-                  <button className="primary-button large-action" onClick={handleKnown} disabled={reviewState === "unknown-reveal"}>
-                    {reviewState === "known-reveal" ? "다음" : "알고 있음"}
+                  <button
+                    className="ghost-button large-action"
+                    onClick={() => handleReview(BASIC_REVIEW_RATING_BY_ACTION.hard, "hard-reveal")}
+                    disabled={isReviewButtonDisabled("hard-reveal")}
+                  >
+                    {reviewState === "hard-reveal" ? "다음" : "힘들게 맞춤"}
+                  </button>
+                  <button
+                    className="primary-button large-action"
+                    onClick={() => handleReview(BASIC_REVIEW_RATING_BY_ACTION.good, "good-reveal")}
+                    disabled={isReviewButtonDisabled("good-reveal")}
+                  >
+                    {reviewState === "good-reveal" ? "다음" : "바로 앎"}
                   </button>
                 </>
               )}
@@ -1496,17 +1626,39 @@ export function App() {
                 <small>오늘 학습한 단어</small>
               </div>
               <div>
-                <span>{wordbooks.length}</span>
-                <small>암기장</small>
+                <span>{summary.memorizedWordCount}</span>
+                <small>외운 단어</small>
               </div>
             </div>
-            <section className="recent-list" aria-label="최근 단어장">
-              <h2>최근 단어장</h2>
-              {recentWordbooks.map((wordbook) => (
-                <button key={wordbook.wordbookId} onClick={() => setActiveWordbookId(wordbook.wordbookId)}>
-                  {wordbook.name}
-                </button>
-              ))}
+            <section className="memorized-list" aria-label="외운 단어 목록">
+              <h2>외운 단어</h2>
+              {summary.memorizedWords.length > 0 ? (
+                summary.memorizedWords.map((word) => (
+                  <button
+                    key={word.wordId}
+                    className="memorized-item"
+                    type="button"
+                    onClick={() => {
+                      const memorizedWordbook = wordbooks.find((wordbook) => wordbook.id === word.wordbookId);
+                      if (memorizedWordbook) {
+                        selectWordbook(memorizedWordbook);
+                      } else {
+                        setActiveWordbookId(word.wordbookId);
+                        resetStudySession();
+                      }
+                      setHomeView("study");
+                    }}
+                  >
+                    <span>
+                      <strong>{word.key}</strong>
+                      <small>{word.wordbookName}</small>
+                    </span>
+                    <em>{word.value}</em>
+                  </button>
+                ))
+              ) : (
+                <p className="profile-empty">아직 알고 있음으로 표시한 단어가 없습니다.</p>
+              )}
             </section>
           </section>
         )}

@@ -1,9 +1,13 @@
-import type { Direction, Word } from "../types";
+import { CardType, type Direction, type TodayStudyCard, type Word } from "../types";
 import { debugLog } from "./logger";
 
 interface StudyQueueItem {
   word: Word;
   direction: Direction;
+  cardId?: string;
+  cardType?: CardType;
+  prompt?: string;
+  answer?: string;
 }
 
 export interface StudyCard {
@@ -11,6 +15,8 @@ export interface StudyCard {
   prompt: string;
   answer: string;
   direction: Direction;
+  cardId?: string;
+  cardType?: CardType;
 }
 
 export interface StudySession {
@@ -42,6 +48,42 @@ export function createStudySession(words: Word[], random = Math.random): StudySe
   return { queue, index: 0, revealed: false };
 }
 
+export function cardTypeFromDirection(direction: Direction): CardType {
+  return direction === "key-to-value" ? CardType.BASIC_KEY_TO_VALUE : CardType.BASIC_VALUE_TO_KEY;
+}
+
+export function directionFromCardType(cardType: CardType): Direction {
+  return cardType === CardType.BASIC_VALUE_TO_KEY ? "value-to-key" : "key-to-value";
+}
+
+export function createStudySessionFromCards(cards: TodayStudyCard[]): StudySession {
+  const queue = cards.map((card): StudyQueueItem => {
+    const direction = directionFromCardType(card.cardType);
+    const now = new Date().toISOString();
+    return {
+      word: {
+        id: card.legacyWordId ?? card.cardId,
+        wordbookId: card.wordbookId,
+        key: direction === "key-to-value" ? card.prompt : card.answer,
+        value: direction === "key-to-value" ? card.answer : card.prompt,
+        lastViewedAt: null,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        syncRevision: 0
+      },
+      direction,
+      cardId: card.cardId,
+      cardType: card.cardType,
+      prompt: card.prompt,
+      answer: card.answer
+    };
+  });
+
+  debugLog("session", "Created server study session", { size: queue.length });
+  return { queue, index: 0, revealed: false };
+}
+
 export function getCurrentCard(session: StudySession): StudyCard | null {
   const item = session.queue[session.index];
   if (!item) {
@@ -50,9 +92,11 @@ export function getCurrentCard(session: StudySession): StudyCard | null {
 
   return {
     word: item.word,
-    prompt: item.direction === "key-to-value" ? item.word.key : item.word.value,
-    answer: item.direction === "key-to-value" ? item.word.value : item.word.key,
-    direction: item.direction
+    prompt: item.prompt ?? (item.direction === "key-to-value" ? item.word.key : item.word.value),
+    answer: item.answer ?? (item.direction === "key-to-value" ? item.word.value : item.word.key),
+    direction: item.direction,
+    cardId: item.cardId,
+    cardType: item.cardType
   };
 }
 

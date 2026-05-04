@@ -351,6 +351,8 @@ textarea:focus {
 
 .top-nav {
   grid-area: top;
+  position: relative;
+  z-index: 3;
   display: grid;
   grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
   align-items: center;
@@ -421,6 +423,8 @@ textarea:focus {
 
 .memory-sidebar {
   grid-area: side;
+  position: relative;
+  z-index: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -444,7 +448,8 @@ textarea:focus {
 }
 
 .wordbook-create h2,
-.recent-list h2 {
+.recent-list h2,
+.memorized-list h2 {
   margin: 0;
   color: #657084;
   font-size: 13px;
@@ -455,13 +460,15 @@ textarea:focus {
 }
 
 .wordbook-list,
-.recent-list {
+.recent-list,
+.memorized-list {
   display: grid;
   gap: 6px;
 }
 
 .wordbook-item,
-.recent-list button {
+.recent-list button,
+.memorized-item {
   width: 100%;
   border: 0;
   background: transparent;
@@ -492,6 +499,8 @@ textarea:focus {
 
 .home-content {
   grid-area: main;
+  position: relative;
+  z-index: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden auto;
@@ -531,6 +540,29 @@ textarea:focus {
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 14px 32px rgba(76, 36, 12, 0.14);
+}
+
+.speech-toggle {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f2b2b;
+  box-shadow: 0 14px 28px rgba(76, 36, 12, 0.16);
+}
+
+.speech-toggle.active {
+  background: #1f6f78;
+  color: #ffffff;
+}
+
+.speech-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.notebook-speech-control {
+  position: absolute;
+  top: 28px;
+  right: 17px;
+  z-index: 2;
 }
 
 .notebook-stage {
@@ -1062,6 +1094,70 @@ textarea:focus {
   color: #657084;
 }
 
+.memorized-list {
+  align-content: start;
+  max-height: min(52vh, 520px);
+  overflow: hidden auto;
+}
+
+.memorized-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(80px, 34%);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid #dce1ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.memorized-item:hover {
+  border-color: rgba(31, 111, 120, 0.45);
+  background: #f7fbfc;
+}
+
+.memorized-item span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.memorized-item strong,
+.memorized-item small,
+.memorized-item em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memorized-item strong {
+  color: #172033;
+  font-size: 15px;
+}
+
+.memorized-item small {
+  color: #657084;
+  font-size: 12px;
+}
+
+.memorized-item em {
+  color: #1f6f78;
+  font-style: normal;
+  font-weight: 850;
+  text-align: right;
+}
+
+.profile-empty {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #657084;
+  font-weight: 800;
+}
+
 .primary-button,
 .ghost-button,
 .danger-button,
@@ -1146,6 +1242,7 @@ textarea:focus {
 @media (max-width: 1060px) {
   .home-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
     grid-template-areas:
       "top"
       "side"
@@ -1154,6 +1251,10 @@ textarea:focus {
 
   .home-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      "top"
+      "main";
   }
 
   .memory-sidebar {
@@ -1162,14 +1263,36 @@ textarea:focus {
   }
 
   .top-nav {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "brand profile"
+      "tabs tabs";
     height: auto;
     padding: 12px;
   }
 
-  .main-tabs,
-  .profile-chip {
+  .brand-area {
+    grid-area: brand;
+  }
+
+  .main-tabs {
+    grid-area: tabs;
     justify-self: stretch;
+  }
+
+  .profile-chip {
+    grid-area: profile;
+    min-width: 0;
+    max-width: min(44vw, 360px);
+    justify-self: end;
+  }
+
+  .profile-chip span {
+    min-width: 0;
+    max-width: min(28vw, 220px);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .main-tabs {
@@ -1294,5 +1417,13 @@ textarea:focus {
 
   .profile-stats {
     grid-template-columns: 1fr;
+  }
+
+  .memorized-item {
+    grid-template-columns: 1fr;
+  }
+
+  .memorized-item em {
+    text-align: left;
   }
 }

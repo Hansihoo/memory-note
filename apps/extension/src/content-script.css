@@ -1,0 +1,293 @@
+:host {
+  all: initial;
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 2147483647;
+  width: min(268px, calc(100vw - 32px));
+  color: #18231f;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  pointer-events: none;
+}
+
+.mnq-shell {
+  box-sizing: border-box;
+  width: 100%;
+  overflow: hidden;
+  pointer-events: auto;
+  background:
+    linear-gradient(90deg, rgba(39, 98, 79, 0.16) 0 4px, transparent 4px),
+    repeating-linear-gradient(#fffdf7 0 29px, #e7edf0 29px 30px);
+  border: 1px solid rgba(33, 50, 44, 0.18);
+  border-radius: 8px;
+  box-shadow: 0 16px 44px rgba(15, 23, 42, 0.2);
+}
+
+.mnq-header,
+.mnq-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mnq-header {
+  justify-content: flex-end;
+  padding: 8px 8px 4px 14px;
+}
+
+.mnq-progress {
+  margin-right: auto;
+  color: rgba(24, 35, 31, 0.68);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.mnq-close {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: rgba(24, 35, 31, 0.74);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+
+.mnq-close:hover {
+  background: rgba(24, 35, 31, 0.08);
+}
+
+.mnq-body {
+  padding: 6px 12px 12px 16px;
+}
+
+.mnq-note {
+  display: grid;
+  gap: 8px;
+}
+
+.mnq-note-row {
+  min-height: 58px;
+  display: grid;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(39, 98, 79, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.mnq-text-with-speech {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 8px;
+}
+
+.mnq-prompt,
+.mnq-answer {
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+
+.mnq-prompt {
+  color: #14211c;
+  font-size: 21px;
+  font-weight: 850;
+}
+
+.mnq-answer {
+  color: #1f6f57;
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.mnq-answer.pending {
+  color: rgba(24, 35, 31, 0.42);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.mnq-speak {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: #27624f;
+  background: rgba(39, 98, 79, 0.08);
+  border: 1px solid rgba(39, 98, 79, 0.16);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.mnq-speak:hover {
+  background: rgba(39, 98, 79, 0.14);
+}
+
+.mnq-speak svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.mnq-choice-row,
+.mnq-footer {
+  margin-top: 10px;
+}
+
+.mnq-choice-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.mnq-choice,
+.mnq-next,
+.mnq-restart {
+  min-height: 30px;
+  border: 1px solid rgba(24, 35, 31, 0.14);
+  border-radius: 7px;
+  background: #f6f1e7;
+  color: #17231f;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.mnq-choice {
+  width: 38px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 13px;
+}
+
+.mnq-next-choice,
+.mnq-choice-placeholder {
+  width: 38px;
+  min-height: 32px;
+}
+
+.mnq-next-choice {
+  padding: 0;
+}
+
+.mnq-choice-placeholder {
+  display: block;
+}
+
+.mnq-choice:hover,
+.mnq-next:hover,
+.mnq-restart:hover {
+  background: #ece4d6;
+}
+
+.mnq-choice[data-mark="know"] {
+  color: #0d6b4e;
+  background: #e7f4ee;
+}
+
+.mnq-choice[data-mark="unknown"] {
+  color: #9b2d2d;
+  background: #f7e8e5;
+}
+
+.mnq-selected {
+  color: rgba(24, 35, 31, 0.66);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.mnq-next,
+.mnq-restart {
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+.mnq-complete-title {
+  margin: 0;
+  color: #14211c;
+  font-size: 17px;
+  font-weight: 850;
+  letter-spacing: 0;
+}
+
+.mnq-complete-copy {
+  margin: 8px 0 0;
+  color: rgba(24, 35, 31, 0.72);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mnq-reminder {
+  position: relative;
+  width: min(224px, calc(100vw - 32px));
+  background: #fffdf7;
+}
+
+.mnq-reminder .mnq-close {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+}
+
+.mnq-reminder-button {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  padding: 12px 32px 12px 14px;
+  color: #17231f;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.mnq-reminder-button strong {
+  font-size: 14px;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.mnq-reminder-button span {
+  color: rgba(24, 35, 31, 0.65);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.mnq-reminder-button:hover strong {
+  color: #1f6f57;
+}
+
+@media (max-width: 520px) {
+  :host {
+    top: 10px;
+    right: 10px;
+    width: min(248px, calc(100vw - 20px));
+  }
+
+  .mnq-prompt,
+  .mnq-answer {
+    font-size: 19px;
+  }
+}

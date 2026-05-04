@@ -4,17 +4,17 @@ test("creates a wordbook, imports markdown, and studies one card", async ({ page
   await page.goto("/");
 
   await expect(page.getByRole("button", { name: "Google로 시작하기" })).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "무료로 시작하기" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "다시 학습하기" })).toBeVisible();
   await page.getByRole("button", { name: "가입", exact: true }).click();
   const username = `demo-${Date.now()}`;
   await page.getByLabel("아이디").fill(username);
   await page.getByLabel("비밀번호").fill("password123");
   await page.getByRole("button", { name: "가입하기" }).click();
   await expect(page.getByRole("navigation", { name: "상단 메뉴" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /해외 여행 필수 영단어/ })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /해외여행 필수 영어문장/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /암기 노트 기본 단어/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /암기 노트 기본 문장/ })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /100/ })).toHaveCount(2);
-  await page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /해외여행 필수 영어문장/ }).click();
+  await page.getByRole("navigation", { name: "단어장 목록" }).getByRole("button", { name: /암기 노트 기본 문장/ }).click();
   await expect(page.locator(".notebook-question .study-term")).toHaveClass(/compact-study-text/);
 
   const wordbookName = `시험 단어장 ${Date.now()}`;

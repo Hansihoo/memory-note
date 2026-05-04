@@ -14,14 +14,37 @@ from .database import get_db, init_db
 from .deps import get_current_user, get_user_word, get_user_wordbook
 from .google_auth import verify_google_id_token
 from .logging_config import configure_logging, debug_log
-from .models import AuthToken, LearningEvent, SyncEvent, User, Word, Wordbook
+from .models import AuthToken, Card, LearningEvent, MemoryItem, ReviewLog, ReviewState, SyncEvent, User, Word, Wordbook
+from .review import (
+    CARD_TYPE_KEY_TO_VALUE,
+    RATING_AGAIN,
+    RATING_BY_LEGACY_RESULT,
+    backfill_review_models,
+    calculate_retrievability,
+    deactivate_memory_item_for_word,
+    ensure_memory_item_for_word,
+    find_card_for_word,
+    order_today_rows,
+    review_card,
+    today_cards_query,
+    today_summary,
+)
 from .schemas import (
     AuthRequest,
+    CardReviewRequest,
+    CardReviewResponse,
+    CardStatus,
+    CardType,
     GoogleAuthRequest,
+    MemorizedWordSummary,
     MessageResponse,
     ProfileSummary,
+    ReviewRating,
     StudyRequest,
     StudyResponse,
+    TodayStudyCard,
+    TodayStudyResponse,
+    TodayStudySummary,
     SyncApplied,
     SyncChange,
     SyncConflict,
@@ -82,6 +105,11 @@ def wordbook_response(db: Session, wordbook: Wordbook) -> WordbookResponse:
     return WordbookResponse.from_orm(wordbook).copy(update={"word_count": count})
 
 
+def word_response(word: Word) -> WordResponse:
+    item_type = word.memory_item.item_type if word.memory_item is not None else "WORD"
+    return WordResponse.from_orm(word).copy(update={"item_type": item_type})
+
+
 def issue_user_token(db: Session, user: User) -> TokenResponse:
     token, token_hash = issue_token()
     db.add(AuthToken(user_id=user.id, token_hash=token_hash))
@@ -127,6 +155,7 @@ def soft_delete_word(db: Session, user: User, word: Word) -> None:
     now = utcnow()
     word.deleted_at = now
     word.key = f"{word.key}__deleted__{word.id}"
+    deactivate_memory_item_for_word(db, user, word)
     mark_word_changed(db, user, word, "delete")
 
 
@@ -135,7 +164,68 @@ def wordbook_dict(db: Session, wordbook: Wordbook) -> Dict[str, Any]:
 
 
 def word_dict(word: Word) -> Dict[str, Any]:
-    return WordResponse.from_orm(word).dict(by_alias=True)
+    return word_response(word).dict(by_alias=True)
+
+
+def today_card_response(card: Card, item: MemoryItem, state: ReviewState) -> TodayStudyCard:
+    return TodayStudyCard(
+        card_id=card.id,
+        memory_item_id=item.id,
+        legacy_word_id=item.legacy_word_id,
+        wordbook_id=card.wordbook_id,
+        card_type=CardType(card.card_type),
+        prompt=card.prompt,
+        answer=card.answer,
+        status=CardStatus(state.status),
+        due_at=state.due_at,
+        lapses=state.lapses or 0,
+        leech_score=state.leech_score or 0,
+        retrievability=calculate_retrievability(state),
+    )
+
+
+def card_review_response(card: Card, state: ReviewState, rating: str, review_log: Optional[ReviewLog], deduplicated: bool) -> CardReviewResponse:
+    item = card.memory_item
+    return CardReviewResponse(
+        card_id=card.id,
+        memory_item_id=card.item_id,
+        legacy_word_id=item.legacy_word_id if item else None,
+        wordbook_id=card.wordbook_id,
+        rating=ReviewRating(rating),
+        status=CardStatus(state.status),
+        due_at=state.due_at,
+        last_reviewed_at=state.last_reviewed_at,
+        interval_days=state.interval_days or 0,
+        lapses=state.lapses or 0,
+        streak=state.streak or 0,
+        leech_score=state.leech_score or 0,
+        review_log_id=review_log.id if review_log is not None else None,
+        deduplicated=deduplicated,
+    )
+
+
+def sync_legacy_word_after_review(db: Session, user: User, card: Card, rating: str, reviewed_at: datetime, create_learning_event: bool) -> Optional[Word]:
+    item = card.memory_item
+    if item is None or item.legacy_word_id is None:
+        return None
+
+    word = db.query(Word).filter(Word.id == item.legacy_word_id, Word.deleted_at.is_(None)).first()
+    if word is None:
+        return None
+
+    word.last_viewed_at = reviewed_at
+    mark_word_changed(db, user, word, "update")
+    if create_learning_event:
+        db.add(
+            LearningEvent(
+                user_id=user.id,
+                wordbook_id=word.wordbook_id,
+                word_id=word.id,
+                result="unknown" if rating == RATING_AGAIN else "known",
+                studied_at=reviewed_at,
+            )
+        )
+    return word
 
 
 def sync_conflict(entity_type: str, change: SyncChange, reason: str, server_entity: Optional[Dict[str, Any]]) -> SyncConflict:
@@ -243,6 +333,7 @@ def apply_word_change(
         row = Word(wordbook_id=wordbook.id, key=key, value=value, last_viewed_at=_payload_datetime(change.payload, "lastViewedAt"))
         db.add(row)
         db.flush()
+        ensure_memory_item_for_word(db, user, row, str(change.payload.get("itemType") or change.payload.get("item_type") or "WORD"))
         mark_word_changed(db, user, row, "create")
         applied.append(SyncApplied(entity_type="word", entity_id=row.id, client_id=change.client_id, sync_revision=row.sync_revision))
         return
@@ -269,6 +360,12 @@ def apply_word_change(
         existing_word.value = value
     if "lastViewedAt" in change.payload:
         existing_word.last_viewed_at = _payload_datetime(change.payload, "lastViewedAt")
+    ensure_memory_item_for_word(
+        db,
+        user,
+        existing_word,
+        str(change.payload.get("itemType") or change.payload.get("item_type") or (existing_word.memory_item.item_type if existing_word.memory_item else "WORD")),
+    )
     mark_word_changed(db, user, existing_word, "update")
     applied.append(SyncApplied(entity_type="word", entity_id=existing_word.id, client_id=change.client_id, sync_revision=existing_word.sync_revision))
 
@@ -423,7 +520,8 @@ def register_routes(api: FastAPI) -> None:
         db: Session = Depends(get_db),
     ) -> List[WordResponse]:
         get_user_wordbook(db, current_user, wordbook_id)
-        return db.query(Word).filter(Word.wordbook_id == wordbook_id, Word.deleted_at.is_(None)).order_by(Word.id.asc()).all()
+        rows = db.query(Word).filter(Word.wordbook_id == wordbook_id, Word.deleted_at.is_(None)).order_by(Word.id.asc()).all()
+        return [word_response(row) for row in rows]
 
     @api.post("/wordbooks/{wordbook_id}/words", response_model=WordResponse, status_code=status.HTTP_201_CREATED)
     def create_word(
@@ -431,12 +529,13 @@ def register_routes(api: FastAPI) -> None:
         payload: WordCreate,
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
-    ) -> Word:
+    ) -> WordResponse:
         get_user_wordbook(db, current_user, wordbook_id)
         row = Word(wordbook_id=wordbook_id, key=payload.key, value=payload.value, last_viewed_at=payload.last_viewed_at)
         db.add(row)
         try:
             db.flush()
+            ensure_memory_item_for_word(db, current_user, row, payload.item_type or "WORD")
             mark_word_changed(db, current_user, row, "create")
             db.commit()
         except IntegrityError:
@@ -444,7 +543,7 @@ def register_routes(api: FastAPI) -> None:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Word key already exists in wordbook")
         db.refresh(row)
         debug_log("DEBUG_IMPORT", logger, "created_word", word_id=row.id, wordbook_id=wordbook_id)
-        return row
+        return word_response(row)
 
     @api.post("/wordbooks/{wordbook_id}/words/batch", response_model=WordBatchResponse)
     def batch_upsert_words(
@@ -468,11 +567,13 @@ def register_routes(api: FastAPI) -> None:
                 row = Word(wordbook_id=wordbook_id, key=item.key, value=item.value, last_viewed_at=item.last_viewed_at)
                 db.add(row)
                 db.flush()
+                ensure_memory_item_for_word(db, current_user, row, item.item_type or "WORD")
                 mark_word_changed(db, current_user, row, "create")
             else:
                 row.key = item.key
                 row.value = item.value
                 row.last_viewed_at = item.last_viewed_at
+                ensure_memory_item_for_word(db, current_user, row, item.item_type or (row.memory_item.item_type if row.memory_item else "WORD"))
                 mark_word_changed(db, current_user, row, "update")
             changed.append(row)
 
@@ -485,15 +586,15 @@ def register_routes(api: FastAPI) -> None:
         for row in changed:
             db.refresh(row)
         debug_log("DEBUG_IMPORT", logger, "batch_upsert_words", wordbook_id=wordbook_id, count=len(changed))
-        return WordBatchResponse(words=changed)
+        return WordBatchResponse(words=[word_response(row) for row in changed])
 
     @api.get("/words/{word_id}", response_model=WordResponse)
     def read_word(
         word_id: int,
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
-    ) -> Word:
-        return get_user_word(db, current_user, word_id)
+    ) -> WordResponse:
+        return word_response(get_user_word(db, current_user, word_id))
 
     @api.patch("/words/{word_id}", response_model=WordResponse)
     def update_word(
@@ -501,18 +602,22 @@ def register_routes(api: FastAPI) -> None:
         payload: WordUpdate,
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
-    ) -> Word:
+    ) -> WordResponse:
         row = get_user_word(db, current_user, word_id)
+        item_type = payload.item_type
         for field, value in payload.dict(by_alias=False, exclude_unset=True).items():
+            if field == "item_type":
+                continue
             setattr(row, field, value)
         try:
+            ensure_memory_item_for_word(db, current_user, row, item_type or (row.memory_item.item_type if row.memory_item else "WORD"))
             mark_word_changed(db, current_user, row, "update")
             db.commit()
         except IntegrityError:
             db.rollback()
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Word key already exists in wordbook")
         db.refresh(row)
-        return row
+        return word_response(row)
 
     @api.delete("/words/{word_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_word(
@@ -525,6 +630,90 @@ def register_routes(api: FastAPI) -> None:
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    @api.get("/study/today", response_model=TodayStudyResponse)
+    def study_today(
+        wordbookId: Optional[int] = None,
+        limit: int = 20,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> TodayStudyResponse:
+        if wordbookId is not None:
+            get_user_wordbook(db, current_user, wordbookId)
+        backfill_review_models(db, current_user)
+        db.flush()
+        rows = today_cards_query(db, current_user, wordbookId).all()
+        ordered_rows = order_today_rows(rows)[: max(1, min(limit, 100))]
+        summary = today_summary(db, current_user, wordbookId)
+        return TodayStudyResponse(
+            summary=TodayStudySummary(
+                due_count=summary["dueCount"],
+                new_count=summary["newCount"],
+                weak_count=summary["weakCount"],
+                estimated_minutes=summary["estimatedMinutes"],
+            ),
+            cards=[today_card_response(card, item, state) for card, item, state in ordered_rows],
+        )
+
+    @api.post("/study/cards/{card_id}/review", response_model=CardReviewResponse)
+    def review_study_card(
+        card_id: int,
+        payload: CardReviewRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> CardReviewResponse:
+        card = db.query(Card).filter(Card.id == card_id, Card.user_id == current_user.id).first()
+        if card is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review card not found")
+
+        card, state, log, deduplicated = review_card(
+            db,
+            current_user,
+            card,
+            payload.rating.value,
+            confidence=payload.confidence,
+            response_text=payload.response_text,
+            latency_ms=payload.latency_ms,
+            platform=payload.platform.value if payload.platform else "WEB",
+            session_id=payload.session_id,
+            client_event_id=payload.client_event_id,
+        )
+        if not deduplicated:
+            sync_legacy_word_after_review(db, current_user, card, payload.rating.value, state.last_reviewed_at or utcnow(), True)
+        db.commit()
+        db.refresh(state)
+        if log is not None:
+            db.refresh(log)
+        debug_log("DEBUG_PROGRESS", logger, "card_review_recorded", user_id=current_user.id, card_id=card.id)
+        return card_review_response(card, state, payload.rating.value, log, deduplicated)
+
+    @api.get("/study/mistakes", response_model=TodayStudyResponse)
+    def study_mistakes(
+        wordbookId: Optional[int] = None,
+        limit: int = 20,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> TodayStudyResponse:
+        if wordbookId is not None:
+            get_user_wordbook(db, current_user, wordbookId)
+        backfill_review_models(db, current_user)
+        db.flush()
+        rows = (
+            today_cards_query(db, current_user, wordbookId)
+            .filter((ReviewState.lapses > 0) | (ReviewState.leech_score > 0))
+            .all()
+        )
+        ordered_rows = order_today_rows(rows)[: max(1, min(limit, 100))]
+        summary = today_summary(db, current_user, wordbookId)
+        return TodayStudyResponse(
+            summary=TodayStudySummary(
+                due_count=summary["dueCount"],
+                new_count=summary["newCount"],
+                weak_count=summary["weakCount"],
+                estimated_minutes=summary["estimatedMinutes"],
+            ),
+            cards=[today_card_response(card, item, state) for card, item, state in ordered_rows],
+        )
+
     @api.post("/study/words/{word_id}", response_model=StudyResponse)
     def study_word(
         word_id: int,
@@ -532,23 +721,39 @@ def register_routes(api: FastAPI) -> None:
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> StudyResponse:
+        """Deprecated. Use POST /study/cards/{cardId}/review instead."""
         word = get_user_word(db, current_user, word_id)
-        now = utcnow()
-        word.last_viewed_at = now
-        mark_word_changed(db, current_user, word, "update")
-        event = LearningEvent(
-            user_id=current_user.id,
-            wordbook_id=word.wordbook_id,
-            word_id=word.id,
-            result=payload.result,
-            studied_at=now,
+        rating = RATING_BY_LEGACY_RESULT[payload.result]
+        card = find_card_for_word(db, current_user, word, payload.card_type.value if payload.card_type else CARD_TYPE_KEY_TO_VALUE)
+        card, state, log, deduplicated = review_card(
+            db,
+            current_user,
+            card,
+            rating,
+            confidence=payload.confidence,
+            latency_ms=payload.latency_ms,
+            platform=payload.platform.value if payload.platform else "WEB",
+            session_id=payload.session_id,
+            client_event_id=payload.client_event_id,
         )
-        db.add(event)
+        if not deduplicated:
+            sync_legacy_word_after_review(db, current_user, card, rating, state.last_reviewed_at or utcnow(), True)
         db.commit()
         db.refresh(word)
-        db.refresh(event)
+        db.refresh(state)
+        if log is not None:
+            db.refresh(log)
         debug_log("DEBUG_PROGRESS", logger, "study_recorded", user_id=current_user.id, wordbook_id=word.wordbook_id)
-        return StudyResponse(word=WordResponse.from_orm(word), event_id=event.id, result=event.result, studied_at=event.studied_at)
+        return StudyResponse(
+            word=word_response(word),
+            event_id=log.id if log is not None else 0,
+            result=payload.result,
+            studied_at=state.last_reviewed_at or utcnow(),
+            card_id=card.id,
+            review_log_id=log.id if log is not None else None,
+            due_at=state.due_at,
+            status=state.status,
+        )
 
     @api.get("/sync/pull", response_model=SyncPullResponse)
     def sync_pull(
@@ -572,7 +777,7 @@ def register_routes(api: FastAPI) -> None:
         return SyncPullResponse(
             server_revision=current_user.sync_revision or 0,
             wordbooks=[wordbook_response(db, row) for row in wordbooks],
-            words=[WordResponse.from_orm(row) for row in words],
+            words=[word_response(row) for row in words],
         )
 
     @api.post("/sync/push", response_model=SyncPushResponse)
@@ -622,9 +827,13 @@ def register_routes(api: FastAPI) -> None:
             or 0
         )
         summaries = recent_wordbook_summaries(db, current_user.id)
+        memorized_words = memorized_word_summaries(db, current_user.id)
+        memorized_word_count = memorized_word_total(db, current_user.id)
         return ProfileSummary(
             cumulative_learning_days=cumulative_days,
             today_studied_count=today_count,
+            memorized_word_count=memorized_word_count,
+            memorized_words=memorized_words,
             recent_wordbooks=summaries,
         )
 
@@ -664,6 +873,60 @@ def recent_wordbook_summaries(db: Session, user_id: int) -> List[WordbookStudySu
             studied_count=row.studied_count or 0,
             known_count=row.known_count or 0,
             unknown_count=row.unknown_count or 0,
+            last_studied_at=row.last_studied_at,
+        )
+        for row in rows
+    ]
+
+
+def memorized_word_total(db: Session, user_id: int) -> int:
+    return (
+        db.query(func.count(func.distinct(LearningEvent.word_id)))
+        .join(Word, LearningEvent.word_id == Word.id)
+        .join(Wordbook, LearningEvent.wordbook_id == Wordbook.id)
+        .filter(
+            LearningEvent.user_id == user_id,
+            LearningEvent.result == "known",
+            Word.deleted_at.is_(None),
+            Wordbook.deleted_at.is_(None),
+        )
+        .scalar()
+        or 0
+    )
+
+
+def memorized_word_summaries(db: Session, user_id: int) -> List[MemorizedWordSummary]:
+    rows = (
+        db.query(
+            Word.id.label("word_id"),
+            Wordbook.id.label("wordbook_id"),
+            Wordbook.name.label("wordbook_name"),
+            Word.key,
+            Word.value,
+            func.count(LearningEvent.id).label("known_count"),
+            func.max(LearningEvent.studied_at).label("last_studied_at"),
+        )
+        .join(Word, LearningEvent.word_id == Word.id)
+        .join(Wordbook, LearningEvent.wordbook_id == Wordbook.id)
+        .filter(
+            LearningEvent.user_id == user_id,
+            LearningEvent.result == "known",
+            Word.deleted_at.is_(None),
+            Wordbook.deleted_at.is_(None),
+        )
+        .group_by(Word.id, Wordbook.id, Wordbook.name, Word.key, Word.value)
+        .order_by(func.max(LearningEvent.studied_at).desc())
+        .limit(50)
+        .all()
+    )
+    return [
+        MemorizedWordSummary(
+            word_id=row.word_id,
+            wordbook_id=row.wordbook_id,
+            wordbook_name=row.wordbook_name,
+            key=row.key,
+            value=row.value,
+            known_count=row.known_count or 0,
             last_studied_at=row.last_studied_at,
         )
         for row in rows

@@ -1,4 +1,18 @@
-import type { ProfileSummary, UserProfile, Word, Wordbook, WordbookSummary } from "../types";
+import type {
+  CardReviewResponse,
+  CardStatus,
+  CardType,
+  MemorizedWordSummary,
+  ProfileSummary,
+  ReviewRating,
+  StudyPlatform,
+  TodayStudyCard,
+  TodayStudyResponse,
+  UserProfile,
+  Word,
+  Wordbook,
+  WordbookSummary
+} from "../types";
 
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 const TOKEN_KEY = "memory-assistant-token";
@@ -37,6 +51,7 @@ interface ServerWord {
   wordbookId: number;
   key: string;
   value: string;
+  itemType?: Word["itemType"];
   lastViewedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -53,6 +68,16 @@ interface ServerSyncPull {
 interface ServerProfileSummary {
   cumulativeLearningDays: number;
   todayStudiedCount: number;
+  memorizedWordCount?: number;
+  memorizedWords?: Array<{
+    wordId: number;
+    wordbookId: number;
+    wordbookName: string;
+    key: string;
+    value: string;
+    knownCount: number;
+    lastStudiedAt: string | null;
+  }>;
   recentWordbooks: Array<{
     wordbookId: number;
     name: string;
@@ -61,6 +86,43 @@ interface ServerProfileSummary {
     unknownCount: number;
     lastStudiedAt: string | null;
   }>;
+}
+
+interface ServerTodayStudyCard {
+  cardId: number;
+  memoryItemId: number;
+  legacyWordId?: number | null;
+  wordbookId: number;
+  cardType: CardType;
+  prompt: string;
+  answer: string;
+  status: CardStatus;
+  dueAt: string;
+  lapses: number;
+  leechScore: number;
+  retrievability?: number;
+}
+
+interface ServerTodayStudyResponse {
+  summary: TodayStudyResponse["summary"];
+  cards: ServerTodayStudyCard[];
+}
+
+interface ServerCardReviewResponse {
+  cardId: number;
+  memoryItemId: number;
+  legacyWordId?: number | null;
+  wordbookId: number;
+  rating: ReviewRating;
+  status: CardStatus;
+  dueAt: string;
+  lastReviewedAt: string | null;
+  intervalDays: number;
+  lapses: number;
+  streak: number;
+  leechScore: number;
+  reviewLogId?: number | null;
+  deduplicated?: boolean;
 }
 
 function getToken(): string {
@@ -108,6 +170,7 @@ function mapWord(word: ServerWord): Word {
     wordbookId: String(word.wordbookId),
     key: word.key,
     value: word.value,
+    itemType: word.itemType ?? "WORD",
     lastViewedAt: word.lastViewedAt,
     createdAt: word.createdAt,
     updatedAt: word.updatedAt,
@@ -143,6 +206,16 @@ function mapProfile(summary: ServerProfileSummary): ProfileSummary {
   return {
     cumulativeLearningDays: summary.cumulativeLearningDays,
     todayStudiedCount: summary.todayStudiedCount,
+    memorizedWordCount: summary.memorizedWordCount ?? summary.memorizedWords?.length ?? 0,
+    memorizedWords: (summary.memorizedWords ?? []).map((word): MemorizedWordSummary => ({
+      wordId: String(word.wordId),
+      wordbookId: String(word.wordbookId),
+      wordbookName: word.wordbookName,
+      key: word.key,
+      value: word.value,
+      knownCount: word.knownCount,
+      lastStudiedAt: word.lastStudiedAt
+    })),
     recentWordbooks: summary.recentWordbooks.map((wordbook): WordbookSummary => ({
       wordbookId: String(wordbook.wordbookId),
       name: wordbook.name,
@@ -154,9 +227,58 @@ function mapProfile(summary: ServerProfileSummary): ProfileSummary {
   };
 }
 
+function mapTodayStudyCard(card: ServerTodayStudyCard): TodayStudyCard {
+  return {
+    cardId: String(card.cardId),
+    memoryItemId: String(card.memoryItemId),
+    legacyWordId: card.legacyWordId == null ? null : String(card.legacyWordId),
+    wordbookId: String(card.wordbookId),
+    cardType: card.cardType,
+    prompt: card.prompt,
+    answer: card.answer,
+    status: card.status,
+    dueAt: card.dueAt,
+    lapses: card.lapses,
+    leechScore: card.leechScore,
+    retrievability: card.retrievability
+  };
+}
+
+function mapTodayStudyResponse(response: ServerTodayStudyResponse): TodayStudyResponse {
+  return {
+    summary: response.summary,
+    cards: response.cards.map(mapTodayStudyCard)
+  };
+}
+
+function mapCardReview(response: ServerCardReviewResponse): CardReviewResponse {
+  return {
+    cardId: String(response.cardId),
+    memoryItemId: String(response.memoryItemId),
+    legacyWordId: response.legacyWordId == null ? null : String(response.legacyWordId),
+    wordbookId: String(response.wordbookId),
+    rating: response.rating,
+    status: response.status,
+    dueAt: response.dueAt,
+    lastReviewedAt: response.lastReviewedAt,
+    intervalDays: response.intervalDays,
+    lapses: response.lapses,
+    streak: response.streak,
+    leechScore: response.leechScore,
+    reviewLogId: response.reviewLogId == null ? null : String(response.reviewLogId),
+    deduplicated: response.deduplicated ?? false
+  };
+}
+
 export const apiClient = {
   hasToken() {
     return getToken().length > 0;
+  },
+  getToken() {
+    return getToken();
+  },
+  getApiBaseUrl() {
+    return API_BASE_URL;
   },
   async register(payload: { username: string; password: string }) {
     const result = await request<ServerToken>("/auth/register", {
@@ -254,10 +376,38 @@ export const apiClient = {
   async deleteWord(wordId: string) {
     await request<void>(`/words/${wordId}`, { method: "DELETE" });
   },
-  async studyWord(wordId: string, result: "known" | "unknown") {
+  async studyToday(wordbookId?: string, limit = 20) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (wordbookId) {
+      params.set("wordbookId", wordbookId);
+    }
+    return mapTodayStudyResponse(await request<ServerTodayStudyResponse>(`/study/today?${params.toString()}`));
+  },
+  async reviewCard(
+    cardId: string,
+    payload: {
+      rating: ReviewRating;
+      platform?: StudyPlatform;
+      clientEventId?: string;
+      latencyMs?: number;
+      confidence?: number;
+    }
+  ) {
+    return mapCardReview(
+      await request<ServerCardReviewResponse>(`/study/cards/${cardId}/review`, {
+        method: "POST",
+        body: JSON.stringify(payload)
+      })
+    );
+  },
+  async studyWord(
+    wordId: string,
+    result: "known" | "unknown",
+    options: { cardType?: CardType; platform?: StudyPlatform; clientEventId?: string } = {}
+  ) {
     const response = await request<{ word: ServerWord }>(`/study/words/${wordId}`, {
       method: "POST",
-      body: JSON.stringify({ result })
+      body: JSON.stringify({ result, ...options })
     });
     return mapWord(response.word);
   },

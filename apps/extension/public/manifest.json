@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Memory Note Mini Quiz",
+  "description": "웹페이지 우측 상단에 암기 노트 O/X 미니 퀴즈를 보여줍니다.",
+  "version": "0.1.0",
+  "permissions": ["storage", "scripting", "tabs", "activeTab"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Memory Note Mini Quiz",
+    "default_popup": "popup.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
