@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase M1
-- Active phase: Phase M2 — Mobile Auth
-- Next task: M2.1 Add API client with mobile API base URL config
+- Completed through: Phase M2
+- Active phase: Phase M3 — Mobile Today Study
+- Next task: M3.1 Fetch GET /study/today
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -244,19 +244,19 @@ Acceptance Criteria:
 - Mobile scripts are available through pnpm workspace.
 
 ## Phase M2 — Mobile Auth
-Status: Pending
+Status: Completed
 
 Goal:
 Allow users to log in, register, restore auth state, and log out.
 
 TODO:
-- [ ] M2.1 Add API client with mobile API base URL config.
-- [ ] M2.2 Add login screen.
-- [ ] M2.3 Add register screen.
-- [ ] M2.4 Store auth token in expo-secure-store.
-- [ ] M2.5 Restore auth state on app start.
-- [ ] M2.6 Add logout.
-- [ ] M2.7 Add auth tests or smoke validation where practical.
+- [x] M2.1 Add API client with mobile API base URL config.
+- [x] M2.2 Add login screen.
+- [x] M2.3 Add register screen.
+- [x] M2.4 Store auth token in expo-secure-store.
+- [x] M2.5 Restore auth state on app start.
+- [x] M2.6 Add logout.
+- [x] M2.7 Add auth tests or smoke validation where practical.
 
 Acceptance Criteria:
 - User can log in.
@@ -470,3 +470,11 @@ Acceptance Criteria:
 - M1.5 done: added practical mobile checks through `typecheck`, `test:unit`, `build`, and root workspace script aliases. Files changed: `apps/mobile/package.json`, `apps/mobile/vitest.config.ts`, root `package.json`. Files/functions inspected: web/extension package script patterns. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M1.6.
 - M1.6 done: added a minimal study-focused home screen that renders through Expo Router and imports shared core constants. Files changed: `apps/mobile/app/index.tsx`. Files/functions inspected: existing product color direction from extension/web login UI. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M2.1.
 - Phase M1 done: Mobile App Foundation validated; Phase M2(Mobile Auth) activated.
+- M2.1 done: added `createMobileApiClient` with `EXPO_PUBLIC_API_BASE_URL`/default base URL normalization and existing `/auth/*`/`/me` calls. Files changed: `apps/mobile/src/config.ts`, `apps/mobile/src/api/client.ts`. Files/functions inspected: `apps/web/src/api/client.ts`, `apps/api/app/schemas.py`, auth routes in `apps/api/app/main.py`. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M2.2.
+- M2.2 done: added mobile login route and form that calls the auth context and returns to home on success. Files changed: `apps/mobile/app/login.tsx`, `apps/mobile/app/index.tsx`. Files/functions inspected: Expo Router stack layout and existing web auth payload shape. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M2.3.
+- M2.3 done: added mobile register route and form using the same API response shape. Files changed: `apps/mobile/app/register.tsx`. Files/functions inspected: `/auth/register` schema and login screen. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M2.4.
+- M2.4 done: added SecureStore-backed token persistence through `apps/mobile/src/auth/tokenStorage.ts`; auth token is not stored in AsyncStorage. Files changed: `apps/mobile/src/auth/tokenStorage.ts`, `apps/mobile/src/auth/AuthContext.tsx`. Files/functions inspected: mobile auth policy in `.agent/DECISIONS.md`. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M2.5.
+- M2.5 done: `AuthProvider` restores token on app start, validates it with `/me`, and clears invalid tokens. Files changed: `apps/mobile/src/auth/AuthContext.tsx`, `apps/mobile/app/_layout.tsx`. Files/functions inspected: `/me` response schema. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M2.6.
+- M2.6 done: added settings route with account/API display and logout that clears SecureStore even if server logout fails. Files changed: `apps/mobile/app/settings.tsx`, `apps/mobile/src/auth/AuthContext.tsx`. Files/functions inspected: `/auth/logout` behavior. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M2.7.
+- M2.7 done: added API client unit tests for login token mapping, base URL normalization, and authenticated `/me` bearer headers; smoke validation via Expo export passed. Files changed: `apps/mobile/src/api/client.test.ts`. Files/functions inspected: Vitest mobile config. Validation: `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M3.1.
+- Phase M2 done: Mobile Auth validated; Phase M3(Mobile Today Study) activated.
