@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ReviewRating, StudyPlatform } from "@memory-note/core";
 
 import { createMobileApiClient } from "./client";
 
@@ -46,6 +47,81 @@ describe("createMobileApiClient", () => {
       "https://api.example.com/me",
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: "Bearer secret" })
+      })
+    );
+  });
+
+  it("maps today cards and submits mobile review payloads", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          summary: { dueCount: 1, newCount: 2, weakCount: 3, estimatedMinutes: 4, masteredCheckCount: 1 },
+          cards: [
+            {
+              cardId: 9,
+              memoryItemId: 8,
+              legacyWordId: null,
+              wordbookId: 7,
+              cardType: "BASIC_KEY_TO_VALUE",
+              prompt: "hello",
+              answer: "안녕",
+              status: "NEW",
+              dueAt: "2026-05-05T00:00:00Z",
+              lapses: 0,
+              leechScore: 0,
+              retrievability: 0.5
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          cardId: 9,
+          memoryItemId: 8,
+          legacyWordId: null,
+          wordbookId: 7,
+          rating: "GOOD",
+          status: "REVIEW",
+          dueAt: "2026-05-06T00:00:00Z",
+          lastReviewedAt: "2026-05-05T00:00:00Z",
+          intervalDays: 1,
+          lapses: 0,
+          streak: 1,
+          leechScore: 0,
+          reviewLogId: 3,
+          deduplicated: false
+        })
+      );
+    const api = createMobileApiClient({ baseUrl: "https://api.example.com", fetchImpl, getToken: () => "secret" });
+
+    await expect(api.studyToday(5)).resolves.toEqual({
+      summary: { dueCount: 1, newCount: 2, weakCount: 3, estimatedMinutes: 4, masteredCheckCount: 1 },
+      cards: [
+        {
+          cardId: "9",
+          memoryItemId: "8",
+          legacyWordId: null,
+          wordbookId: "7",
+          cardType: "BASIC_KEY_TO_VALUE",
+          prompt: "hello",
+          answer: "안녕",
+          status: "NEW",
+          dueAt: "2026-05-05T00:00:00Z",
+          lapses: 0,
+          leechScore: 0,
+          retrievability: 0.5
+        }
+      ]
+    });
+    await expect(
+      api.reviewCard("9", { rating: ReviewRating.GOOD, platform: StudyPlatform.MOBILE, clientEventId: "mobile-9-GOOD-test" })
+    ).resolves.toMatchObject({ cardId: "9", rating: "GOOD", status: "REVIEW", reviewLogId: "3" });
+    expect(fetchImpl).toHaveBeenLastCalledWith(
+      "https://api.example.com/study/cards/9/review",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ rating: "GOOD", platform: "MOBILE", clientEventId: "mobile-9-GOOD-test" })
       })
     );
   });

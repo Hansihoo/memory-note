@@ -1,3 +1,11 @@
+import {
+  ReviewRating,
+  StudyPlatform,
+  type ReviewResponse,
+  type TodayCard,
+  type TodaySummary
+} from "@memory-note/core";
+
 import { API_BASE_URL } from "../config";
 
 export interface UserProfile {
@@ -15,6 +23,43 @@ interface ServerUser {
 interface ServerToken {
   token: string;
   user: ServerUser;
+}
+
+interface ServerTodayCard {
+  cardId: number;
+  memoryItemId: number;
+  legacyWordId?: number | null;
+  wordbookId: number;
+  cardType: TodayCard["cardType"];
+  prompt: string;
+  answer: string;
+  status: string;
+  dueAt: string;
+  lapses: number;
+  leechScore: number;
+  retrievability?: number;
+}
+
+interface ServerTodayStudyResponse {
+  summary: TodaySummary;
+  cards: ServerTodayCard[];
+}
+
+interface ServerReviewResponse {
+  cardId: number;
+  memoryItemId: number;
+  legacyWordId?: number | null;
+  wordbookId: number;
+  rating: ReviewRating;
+  status: string;
+  dueAt: string;
+  lastReviewedAt: string | null;
+  intervalDays: number;
+  lapses: number;
+  streak: number;
+  leechScore: number;
+  reviewLogId?: number | null;
+  deduplicated?: boolean;
 }
 
 export class MobileApiError extends Error {
@@ -38,6 +83,42 @@ function mapUser(user: ServerUser): UserProfile {
     id: String(user.id),
     username: user.username,
     displayName: user.displayName || user.username
+  };
+}
+
+function mapTodayCard(card: ServerTodayCard): TodayCard {
+  return {
+    cardId: String(card.cardId),
+    memoryItemId: String(card.memoryItemId),
+    legacyWordId: card.legacyWordId == null ? null : String(card.legacyWordId),
+    wordbookId: String(card.wordbookId),
+    cardType: card.cardType,
+    prompt: card.prompt,
+    answer: card.answer,
+    status: card.status,
+    dueAt: card.dueAt,
+    lapses: card.lapses,
+    leechScore: card.leechScore,
+    retrievability: card.retrievability
+  };
+}
+
+function mapReviewResponse(response: ServerReviewResponse): ReviewResponse {
+  return {
+    cardId: String(response.cardId),
+    memoryItemId: String(response.memoryItemId),
+    legacyWordId: response.legacyWordId == null ? null : String(response.legacyWordId),
+    wordbookId: String(response.wordbookId),
+    rating: response.rating,
+    status: response.status,
+    dueAt: response.dueAt,
+    lastReviewedAt: response.lastReviewedAt,
+    intervalDays: response.intervalDays,
+    lapses: response.lapses,
+    streak: response.streak,
+    leechScore: response.leechScore,
+    reviewLogId: response.reviewLogId == null ? null : String(response.reviewLogId),
+    deduplicated: response.deduplicated ?? false
   };
 }
 
@@ -95,6 +176,27 @@ export function createMobileApiClient(options: MobileApiClientOptions = {}) {
     },
     async logout() {
       await request<void>("/auth/logout", { method: "POST" });
+    },
+    async studyToday(limit = 20) {
+      const params = new URLSearchParams({ limit: String(limit) });
+      const response = await request<ServerTodayStudyResponse>(`/study/today?${params.toString()}`);
+      return { summary: response.summary, cards: response.cards.map(mapTodayCard) };
+    },
+    async reviewCard(
+      cardId: string,
+      payload: {
+        rating: ReviewRating;
+        platform: StudyPlatform;
+        clientEventId: string;
+        responseText?: string;
+      }
+    ) {
+      return mapReviewResponse(
+        await request<ServerReviewResponse>(`/study/cards/${encodeURIComponent(cardId)}/review`, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        })
+      );
     }
   };
 }

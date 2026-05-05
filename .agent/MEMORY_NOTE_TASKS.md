@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase M2
-- Active phase: Phase M3 — Mobile Today Study
-- Next task: M3.1 Fetch GET /study/today
+- Completed through: Phase M3
+- Active phase: Phase M4 — Mobile Pending Review Queue
+- Next task: M4.1 Add AsyncStorage-backed pending review queue
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -267,21 +267,21 @@ Acceptance Criteria:
 - /me works when authenticated.
 
 ## Phase M3 — Mobile Today Study
-Status: Pending
+Status: Completed
 
 Goal:
 Let mobile users fetch today cards and submit reviews.
 
 TODO:
-- [ ] M3.1 Fetch GET /study/today.
-- [ ] M3.2 Render today summary.
-- [ ] M3.3 Render study card prompt and hidden answer.
-- [ ] M3.4 Add answer reveal flow.
-- [ ] M3.5 Submit POST /study/cards/{cardId}/review.
-- [ ] M3.6 Use StudyPlatform.MOBILE.
-- [ ] M3.7 Generate clientEventId for each review.
-- [ ] M3.8 Reuse packages/core session engine where practical.
-- [ ] M3.9 Add study tests or smoke validation where practical.
+- [x] M3.1 Fetch GET /study/today.
+- [x] M3.2 Render today summary.
+- [x] M3.3 Render study card prompt and hidden answer.
+- [x] M3.4 Add answer reveal flow.
+- [x] M3.5 Submit POST /study/cards/{cardId}/review.
+- [x] M3.6 Use StudyPlatform.MOBILE.
+- [x] M3.7 Generate clientEventId for each review.
+- [x] M3.8 Reuse packages/core session engine where practical.
+- [x] M3.9 Add study tests or smoke validation where practical.
 
 Acceptance Criteria:
 - Mobile can load today cards.
@@ -478,3 +478,13 @@ Acceptance Criteria:
 - M2.6 done: added settings route with account/API display and logout that clears SecureStore even if server logout fails. Files changed: `apps/mobile/app/settings.tsx`, `apps/mobile/src/auth/AuthContext.tsx`. Files/functions inspected: `/auth/logout` behavior. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M2.7.
 - M2.7 done: added API client unit tests for login token mapping, base URL normalization, and authenticated `/me` bearer headers; smoke validation via Expo export passed. Files changed: `apps/mobile/src/api/client.test.ts`. Files/functions inspected: Vitest mobile config. Validation: `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M3.1.
 - Phase M2 done: Mobile Auth validated; Phase M3(Mobile Today Study) activated.
+- M3.1 done: added mobile `studyToday` API client call to `GET /study/today?limit=...`. Files changed: `apps/mobile/src/api/client.ts`. Files/functions inspected: web `studyToday` client and API `TodayStudyResponse` schema. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit` passed. Next TODO: M3.2.
+- M3.2 done: home screen now fetches and renders today due/new/weak/mastered-check summary for signed-in users. Files changed: `apps/mobile/app/index.tsx`. Files/functions inspected: `packages/core/src/session.ts::TodaySummary`. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M3.3.
+- M3.3 done: added study screen that renders current card prompt and keeps answer hidden before reveal. Files changed: `apps/mobile/app/study.tsx`. Files/functions inspected: `packages/core/src/session.ts::getCurrentStudyCard`. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M3.4.
+- M3.4 done: added answer reveal flow using `revealStudySession`. Files changed: `apps/mobile/app/study.tsx`. Files/functions inspected: `packages/core/src/session.ts::revealStudySession`. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M3.5.
+- M3.5 done: added review submission through `POST /study/cards/{cardId}/review` and advances the local session only after server success. Files changed: `apps/mobile/src/api/client.ts`, `apps/mobile/app/study.tsx`. Files/functions inspected: `apps/api/app/schemas.py::CardReviewRequest`. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M3.6.
+- M3.6 done: mobile review payload always uses `StudyPlatform.MOBILE`. Files changed: `apps/mobile/src/study/reviewPayload.ts`. Files/functions inspected: `packages/core/src/types.ts::StudyPlatform`. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M3.7.
+- M3.7 done: added `mobile-{cardId}-{rating}-{random}` clientEventId generation for each review request. Files changed: `apps/mobile/src/study/reviewPayload.ts`, `apps/mobile/src/study/reviewPayload.test.ts`. Files/functions inspected: extension clientEventId generation. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M3.8.
+- M3.8 done: study screen reuses `createStudySessionFromTodayCards`, `getCurrentStudyCard`, `revealStudySession`, and `advanceStudySession` from `packages/core`; mobile does not compute `due_at`. Files changed: `apps/mobile/app/study.tsx`. Files/functions inspected: `packages/core/src/session.ts`. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M3.9.
+- M3.9 done: added API mapping and MOBILE review payload tests plus Expo export smoke validation. Files changed: `apps/mobile/src/api/client.test.ts`, `apps/mobile/src/study/reviewPayload.test.ts`. Files/functions inspected: `apps/mobile/vitest.config.ts`. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M4.1.
+- Phase M3 done: Mobile Today Study validated; Phase M4(Mobile Pending Review Queue) activated.

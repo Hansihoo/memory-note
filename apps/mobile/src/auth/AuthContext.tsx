@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { createMobileApiClient, MobileApiError, type UserProfile } from "../api/client";
+import { createMobileApiClient, MobileApiError, type MobileApiClient, type UserProfile } from "../api/client";
 import { clearAuthToken, loadAuthToken, saveAuthToken } from "./tokenStorage";
 
 type AuthStatus = "loading" | "signedOut" | "signedIn";
@@ -11,6 +11,7 @@ interface AuthContextValue {
   token: string | null;
   error: string | null;
   apiBaseUrl: string;
+  api: MobileApiClient;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -124,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       error,
       apiBaseUrl: api.getApiBaseUrl(),
+      api,
       login,
       register,
       logout
