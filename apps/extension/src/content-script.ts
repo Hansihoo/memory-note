@@ -1,5 +1,6 @@
 import {
   createMiniQuizSession,
+  type MemoryCard,
   type MiniQuizSession,
   type MiniQuizSnapshot,
   type QuizMark,
@@ -22,10 +23,10 @@ import {
 import { createExtensionSpeechDriver } from "./speech";
 
 const ROOT_ID = "memory-note-mini-quiz-root";
-const UI_VERSION = "note-speech-layout-v4";
-const AUTO_HIDE_DELAY_MS = 2400;
+const UI_VERSION = "note-speech-layout-v5";
 const MAX_TIMER_DELAY_MS = 2_147_000_000;
 const MIN_QUIZ_TEXT_FONT_SIZE = 8;
+const MAX_MORE_CARD_FETCH_LIMIT = 50;
 
 let autoHideTimer: number | undefined;
 let nextQuizTimer: number | undefined;
@@ -63,14 +64,16 @@ async function bootstrapMiniQuiz(): Promise<void> {
   await startOverlayQuiz();
 }
 
-async function startOverlayQuiz(): Promise<void> {
+async function startOverlayQuiz(seenCardIds = new Set<string>()): Promise<void> {
   document.getElementById(ROOT_ID)?.remove();
   window.clearTimeout(autoHideTimer);
 
   const settings = await loadExtensionSettings();
   let cards;
   try {
-    cards = await loadServerStudyCards(settings.questionsPerRound);
+    cards = await loadServerStudyCards(
+      getCardFetchLimit(settings.questionsPerRound, seenCardIds.size),
+    );
   } catch (error) {
     if (error instanceof ExtensionAuthMissingError) {
       return;
@@ -78,15 +81,23 @@ async function startOverlayQuiz(): Promise<void> {
     return;
   }
 
-  if (cards.length === 0) {
+  const nextCards = selectNextRoundCards(
+    cards,
+    seenCardIds,
+    settings.questionsPerRound,
+  );
+  if (nextCards.length === 0) {
+    if (seenCardIds.size > 0) {
+      renderOverlayMessage("더 볼 단어가 없어요", "잠시 후 새 복습 카드가 생기면 다시 이어갈 수 있습니다.");
+    }
     return;
   }
 
-  const session = createMiniQuizSession(cards, {
+  const session = createMiniQuizSession(nextCards, {
     maxQuestions: settings.questionsPerRound,
   });
 
-  renderOverlay(session);
+  renderOverlay(session, seenCardIds);
   await recordMiniQuizShown();
 }
 
@@ -176,20 +187,20 @@ function bindReminderActions(shell: HTMLElement, host: HTMLElement): void {
     });
 }
 
-function renderOverlay(session: MiniQuizSession): void {
+function renderOverlay(
+  session: MiniQuizSession,
+  seenCardIds = new Set<string>(),
+): void {
   const { host, shell } = createHost();
   shell.setAttribute("aria-label", "미니 암기 퀴즈");
 
   const update = (snapshot = session.snapshot()) => {
     shell.innerHTML = createShellMarkup(snapshot);
-    bindActions(shell, session, update, host);
+    bindActions(shell, session, update, host, seenCardIds);
     fitQuizText(shell);
 
     if (snapshot.isComplete) {
       window.clearTimeout(autoHideTimer);
-      autoHideTimer = window.setTimeout(() => {
-        host.remove();
-      }, AUTO_HIDE_DELAY_MS);
     }
   };
 
@@ -201,6 +212,7 @@ function bindActions(
   session: MiniQuizSession,
   update: (snapshot?: MiniQuizSnapshot) => void,
   host: HTMLElement,
+  seenCardIds: Set<string>,
 ): void {
   shell
     .querySelectorAll<HTMLButtonElement>("[data-action]")
@@ -215,6 +227,12 @@ function bindActions(
 
         if (action === "next") {
           update(session.next());
+          return;
+        }
+
+        if (action === "more") {
+          window.clearTimeout(autoHideTimer);
+          void startOverlayQuiz(seenCardIds);
           return;
         }
 
@@ -233,6 +251,9 @@ function bindActions(
           const snapshot = session.snapshot();
           const currentCardId = snapshot.currentCard?.id;
           const mark = action as QuizMark;
+          if (currentCardId) {
+            seenCardIds.add(currentCardId);
+          }
           update(session.answer(mark));
           if (currentCardId) {
             void submitServerReview(currentCardId, mark).catch(() => undefined);
@@ -262,9 +283,10 @@ function createBodyMarkup(snapshot: MiniQuizSnapshot): string {
   if (snapshot.isComplete) {
     return `
       <p class="mnq-complete-title">${snapshot.maxQuestions}개 완료</p>
-      <p class="mnq-complete-copy">잠시 후 자동으로 사라집니다.</p>
+      <p class="mnq-complete-copy">이어서 다른 단어를 더 볼 수 있어요.</p>
       <div class="mnq-footer">
         <span class="mnq-selected">라운드 종료</span>
+        <button class="mnq-next" type="button" data-action="more">더 풀기</button>
         <button class="mnq-restart" type="button" data-action="restart">다시 풀기</button>
       </div>
     `;
@@ -372,6 +394,44 @@ function getSelectedLabel(mark: QuizMark | null): string {
   }
 
   return "답 확인";
+}
+
+function renderOverlayMessage(title: string, copy: string): void {
+  const { host, shell } = createHost();
+  shell.setAttribute("aria-label", title);
+  shell.innerHTML = `
+    <header class="mnq-header">
+      <button class="mnq-close" type="button" data-action="close" aria-label="미니 퀴즈 닫기">×</button>
+    </header>
+    <div class="mnq-body">
+      <p class="mnq-complete-title">${escapeHtml(title)}</p>
+      <p class="mnq-complete-copy">${escapeHtml(copy)}</p>
+    </div>
+  `;
+  shell
+    .querySelector<HTMLButtonElement>("[data-action='close']")
+    ?.addEventListener("click", () => host.remove());
+}
+
+function getCardFetchLimit(questionCount: number, seenCount: number): number {
+  if (seenCount <= 0) {
+    return questionCount;
+  }
+
+  return Math.min(
+    MAX_MORE_CARD_FETCH_LIMIT,
+    Math.max(questionCount, seenCount + questionCount * 2),
+  );
+}
+
+function selectNextRoundCards(
+  cards: readonly MemoryCard[],
+  seenCardIds: ReadonlySet<string>,
+  questionCount: number,
+): MemoryCard[] {
+  return cards
+    .filter((card) => !seenCardIds.has(card.id))
+    .slice(0, questionCount);
 }
 
 function fitQuizText(container: ParentNode): void {

@@ -14,6 +14,27 @@ function memoryStorage(state: Record<string, unknown>): ExtensionStorageArea {
   };
 }
 
+function jsonResponse(body: unknown, init: ResponseInit = {}) {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+      ...init,
+    }),
+  );
+}
+
+async function waitForElementText(selector: string, text: string): Promise<void> {
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    if (document.querySelector(selector)?.textContent === text) {
+      return;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+  }
+
+  throw new Error(`Expected ${selector} to contain ${text}`);
+}
+
 describe("popup", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -23,9 +44,32 @@ describe("popup", () => {
     delete (globalThis as typeof globalThis & { chrome?: unknown }).chrome;
   });
 
-  it("shows the compact start screen when token is present", async () => {
+  it("starts a quiz automatically when token is present and can load more cards", async () => {
     document.body.innerHTML = `<div id="memory-note-popup-root"></div>`;
     const openOptionsPage = vi.fn();
+    const cards = Array.from({ length: 10 }, (_, index) => ({
+      cardId: index + 1,
+      memoryItemId: index + 101,
+      wordbookId: 1,
+      cardType: "BASIC_KEY_TO_VALUE",
+      prompt: `word-${index + 1}`,
+      answer: `answer-${index + 1}`,
+      status: "NEW",
+      dueAt: "2026-05-05T00:00:00Z",
+      lapses: 0,
+      leechScore: 0,
+    }));
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/study/today") {
+        const limit = Number(url.searchParams.get("limit") ?? 5);
+        return jsonResponse({ cards: cards.slice(0, limit) });
+      }
+      if (url.pathname.startsWith("/study/cards/") && init?.method === "POST") {
+        return jsonResponse({});
+      }
+      return jsonResponse({});
+    });
     (globalThis as typeof globalThis & { chrome?: unknown }).chrome = {
       storage: {
         local: memoryStorage({
@@ -40,21 +84,25 @@ describe("popup", () => {
     };
 
     await import("./popup");
-    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    await waitForElementText(".quiz-prompt", "word-1");
 
-    expect(document.querySelector(".start-title")?.textContent).toBe("Memory Note");
-    expect(document.querySelector(".start-status")?.textContent).toBe(
-      "학습 준비 완료",
-    );
-    expect(document.querySelector("#start-button")?.textContent).toBe("암기 시작");
-    expect(document.querySelector(".start-helper")?.textContent).toBe(
-      "오늘 복습을 바로 시작합니다",
-    );
     expect(document.querySelector(".login-status")).toBeNull();
-    expect(document.body.classList.contains("start-popup")).toBe(true);
+    expect(document.body.classList.contains("start-popup")).toBe(false);
 
-    document.querySelector<HTMLButtonElement>("#options-button")?.click();
-    expect(openOptionsPage).toHaveBeenCalledTimes(1);
+    for (let index = 0; index < 5; index += 1) {
+      document.querySelector<HTMLButtonElement>(".choice-button.know")?.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      document.querySelector<HTMLButtonElement>("[data-action='next']")?.click();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+    }
+
+    expect(document.querySelector("[data-action='more']")?.textContent).toBe(
+      "더 풀기",
+    );
+
+    document.querySelector<HTMLButtonElement>("[data-action='more']")?.click();
+    await waitForElementText(".quiz-prompt", "word-6");
+    expect(openOptionsPage).not.toHaveBeenCalled();
   });
 
   it("shows the compact web login state when token is missing", async () => {

@@ -1,5 +1,6 @@
 import {
   createMiniQuizSession,
+  type MemoryCard,
   type MiniQuizSession,
   type MiniQuizSnapshot,
   type QuizMark,
@@ -34,6 +35,7 @@ const chromeApi = (
 ).chrome;
 const speechDriver = createExtensionSpeechDriver();
 const MIN_QUIZ_TEXT_FONT_SIZE = 8;
+const MAX_MORE_CARD_FETCH_LIMIT = 50;
 
 style.textContent = popupStyles;
 document.head.append(style);
@@ -78,8 +80,9 @@ function renderHome(container: HTMLElement): void {
       renderLoginRequired(container);
       return;
     }
+
+    void startPopupQuiz(container, status);
   });
-  void flushPendingReviews();
 }
 
 function renderLoginRequired(container: HTMLElement): void {
@@ -126,33 +129,57 @@ function openWebAuth(mode: WebAuthMode): void {
 async function startPopupQuiz(
   container: HTMLElement,
   status: HTMLElement | null,
+  seenCardIds = new Set<string>(),
 ): Promise<void> {
-  setStatus(status, "단어를 불러오는 중입니다.");
+  if (status) {
+    setStatus(status, "단어를 불러오는 중입니다.");
+  } else {
+    renderQuizLoading(container, "추가 단어를 불러오는 중입니다.");
+  }
   await flushPendingReviews();
 
   try {
     const settings = await loadExtensionSettings();
-    const cards = await loadServerStudyCards(settings.questionsPerRound);
-    if (cards.length === 0) {
+    const cards = await loadServerStudyCards(
+      getCardFetchLimit(settings.questionsPerRound, seenCardIds.size),
+    );
+    const nextCards = selectNextRoundCards(
+      cards,
+      seenCardIds,
+      settings.questionsPerRound,
+    );
+    if (nextCards.length === 0) {
+      if (seenCardIds.size > 0) {
+        renderNoMoreCards(container, seenCardIds);
+        return;
+      }
       setStatus(status, "오늘 복습할 카드가 없습니다.", true);
       return;
     }
-    const session = createMiniQuizSession(cards, {
+    const session = createMiniQuizSession(nextCards, {
       maxQuestions: settings.questionsPerRound,
     });
 
     await recordMiniQuizShown();
-    renderQuiz(container, session);
+    renderQuiz(container, session, session.snapshot(), seenCardIds);
   } catch (error) {
     if (error instanceof ExtensionAuthMissingError) {
-      setStatus(status, "웹 앱에서 로그인한 뒤 다시 눌러주세요.", true);
+      if (status) {
+        setStatus(status, "웹 앱에서 로그인한 뒤 다시 눌러주세요.", true);
+      } else {
+        renderLoginRequired(container);
+      }
       return;
     }
-    setStatus(
-      status,
-      "퀴즈를 시작하지 못했어요. 확장을 다시 로드한 뒤 시도해주세요.",
-      true,
-    );
+    if (status) {
+      setStatus(
+        status,
+        "퀴즈를 시작하지 못했어요. 확장을 다시 로드한 뒤 시도해주세요.",
+        true,
+      );
+      return;
+    }
+    renderQuizError(container);
   }
 }
 
@@ -160,6 +187,7 @@ function renderQuiz(
   container: HTMLElement,
   session: MiniQuizSession,
   snapshot = session.snapshot(),
+  seenCardIds = new Set<string>(),
 ): void {
   document.body.classList.remove("login-before-popup", "start-popup");
   container.innerHTML = `
@@ -182,13 +210,18 @@ function renderQuiz(
           return;
         }
 
+        if (action === "more") {
+          void startPopupQuiz(container, null, seenCardIds);
+          return;
+        }
+
         if (action === "restart") {
-          renderQuiz(container, session, session.reset());
+          renderQuiz(container, session, session.reset(), seenCardIds);
           return;
         }
 
         if (action === "next") {
-          renderQuiz(container, session, session.next());
+          renderQuiz(container, session, session.next(), seenCardIds);
           return;
         }
 
@@ -201,7 +234,10 @@ function renderQuiz(
           const snapshot = session.snapshot();
           const currentCardId = snapshot.currentCard?.id;
           const mark = action as QuizMark;
-          renderQuiz(container, session, session.answer(mark));
+          if (currentCardId) {
+            seenCardIds.add(currentCardId);
+          }
+          renderQuiz(container, session, session.answer(mark), seenCardIds);
           if (currentCardId) {
             void submitServerReview(currentCardId, mark).catch(async () => {
               await enqueuePendingReview(currentCardId, mark);
@@ -220,9 +256,12 @@ function createQuizBody(snapshot: MiniQuizSnapshot): string {
     return `
       <div class="quiz-body">
         <p class="complete-title">${snapshot.maxQuestions}개 완료</p>
-        <p class="complete-copy">이번 라운드가 끝났습니다.</p>
-        <button class="start-button" type="button" data-action="restart">다시 풀기</button>
-        <button class="options-button" type="button" data-action="home">처음으로</button>
+        <p class="complete-copy">이어서 다른 단어를 더 볼 수 있어요.</p>
+        <div class="complete-actions">
+          <button class="start-button" type="button" data-action="more">더 풀기</button>
+          <button class="options-button" type="button" data-action="restart">다시 풀기</button>
+        </div>
+        <button class="quiet-button" type="button" data-action="home">처음으로</button>
       </div>
     `;
   }
@@ -356,6 +395,83 @@ function setStatus(
 
   status.textContent = message;
   status.classList.toggle("error", isError);
+}
+
+function renderQuizLoading(container: HTMLElement, message: string): void {
+  document.body.classList.remove("login-before-popup", "start-popup");
+  container.innerHTML = `
+    <section class="popup-shell quiz-shell" aria-label="팝업 암기 퀴즈">
+      <div class="quiz-body">
+        <p class="complete-title">${message}</p>
+        <p class="complete-copy">잠시만 기다려주세요.</p>
+      </div>
+    </section>
+  `;
+}
+
+function renderQuizError(container: HTMLElement): void {
+  document.body.classList.remove("login-before-popup", "start-popup");
+  container.innerHTML = `
+    <section class="popup-shell quiz-shell" aria-label="팝업 암기 퀴즈">
+      <div class="quiz-body">
+        <p class="complete-title">퀴즈를 시작하지 못했어요</p>
+        <p class="complete-copy">확장을 다시 로드한 뒤 시도해주세요.</p>
+        <button class="options-button" type="button" id="error-home-button">처음으로</button>
+      </div>
+    </section>
+  `;
+  container
+    .querySelector<HTMLButtonElement>("#error-home-button")
+    ?.addEventListener("click", () => renderHome(container));
+}
+
+function renderNoMoreCards(
+  container: HTMLElement,
+  seenCardIds: Set<string>,
+): void {
+  document.body.classList.remove("login-before-popup", "start-popup");
+  container.innerHTML = `
+    <section class="popup-shell quiz-shell" aria-label="팝업 암기 퀴즈">
+      <div class="quiz-body">
+        <p class="complete-title">더 볼 단어가 없어요</p>
+        <p class="complete-copy">잠시 후 새 복습 카드가 생기면 다시 이어갈 수 있습니다.</p>
+        <div class="complete-actions">
+          <button class="start-button" type="button" id="retry-more-button">다시 확인</button>
+          <button class="options-button" type="button" id="no-more-home-button">처음으로</button>
+        </div>
+      </div>
+    </section>
+  `;
+
+  container
+    .querySelector<HTMLButtonElement>("#retry-more-button")
+    ?.addEventListener("click", () => {
+      void startPopupQuiz(container, null, seenCardIds);
+    });
+  container
+    .querySelector<HTMLButtonElement>("#no-more-home-button")
+    ?.addEventListener("click", () => renderHome(container));
+}
+
+function getCardFetchLimit(questionCount: number, seenCount: number): number {
+  if (seenCount <= 0) {
+    return questionCount;
+  }
+
+  return Math.min(
+    MAX_MORE_CARD_FETCH_LIMIT,
+    Math.max(questionCount, seenCount + questionCount * 2),
+  );
+}
+
+function selectNextRoundCards(
+  cards: readonly MemoryCard[],
+  seenCardIds: ReadonlySet<string>,
+  questionCount: number,
+): MemoryCard[] {
+  return cards
+    .filter((card) => !seenCardIds.has(card.id))
+    .slice(0, questionCount);
 }
 
 function fitQuizText(container: ParentNode): void {
