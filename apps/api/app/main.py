@@ -1926,18 +1926,23 @@ def register_routes(api: FastAPI) -> None:
         today_studied_count = profile_studied_today(db, current_user.id, quest_date)
         quest_review_count = profile_quest_review_count_today(db, current_user.id, quest_date)
         completed_count = min(quest_review_count, target_count)
+        memorized_words = merged_memorized_word_summaries(db, current_user.id)
         return DailyQuestResponse(
             summary=DailyQuestSummary(
                 quest_date=quest_date,
                 target_count=target_count,
                 completed_count=completed_count,
                 remaining_count=max(0, target_count - completed_count),
+                daily_quest_completed=completed_count >= target_count,
+                daily_quest_completed_count=profile_daily_quest_completed_count(db, current_user.id),
                 quest_day_count=profile_study_days(db, current_user.id),
+                memorized_word_count=len(memorized_words),
                 mastered_count=profile_mastered_count(db, current_user.id),
                 today_studied_count=today_studied_count,
                 estimated_minutes=max(3, today_response.summary.estimated_minutes),
             ),
             cards=today_response.cards,
+            memorized_words=memorized_words,
         )
 
     @api.post("/study/cards/{card_id}/review", response_model=CardReviewResponse)
@@ -2128,6 +2133,7 @@ def register_routes(api: FastAPI) -> None:
             recent_wordbooks=summaries,
             mastered_count=profile_mastered_count(db, current_user.id),
             weak_card_count=profile_weak_card_count(db, current_user.id),
+            daily_quest_completed_count=profile_daily_quest_completed_count(db, current_user.id),
             long_term_review_count_30d=long_term_stats["review_count"],
             long_term_correct_count_30d=long_term_stats["correct_count"],
             long_term_recall_rate_30d=long_term_stats["recall_rate"],
@@ -2178,6 +2184,18 @@ def profile_quest_review_count_today(db: Session, user_id: int, today: str) -> i
         or 0
     )
     return int(review_count)
+
+
+def profile_daily_quest_completed_count(db: Session, user_id: int, target_count: int = DEFAULT_DAILY_QUEST_TARGET_COUNT) -> int:
+    review_day = func.date(ReviewLog.reviewed_at)
+    rows = (
+        db.query(review_day.label("review_day"), func.count(ReviewLog.id).label("review_count"))
+        .filter(ReviewLog.user_id == user_id)
+        .group_by(review_day)
+        .having(func.count(ReviewLog.id) >= target_count)
+        .all()
+    )
+    return len(rows)
 
 
 def merged_memorized_word_summaries(db: Session, user_id: int) -> List[MemorizedWordSummary]:

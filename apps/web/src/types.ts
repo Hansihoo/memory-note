@@ -61,6 +61,7 @@ export interface ProfileSummary {
   recentWordbooks: WordbookSummary[];
   masteredCount: number;
   weakCardCount: number;
+  dailyQuestCompletedCount: number;
   longTermReviewCount30d: number;
   longTermCorrectCount30d: number;
   longTermRecallRate30d: number;

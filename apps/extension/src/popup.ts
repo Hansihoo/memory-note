@@ -12,6 +12,7 @@ import {
   loadServerStudyCards,
   submitServerReview,
   type DailyQuestSummary,
+  type MemorizedWordSummary,
 } from "./api";
 import { createWebAuthUrl, loadExtensionAuth, type WebAuthMode } from "./auth";
 import popupStyles from "./popup.css?inline";
@@ -63,7 +64,7 @@ function renderHome(container: HTMLElement): void {
     void loadDailyQuest(DAILY_QUEST_TARGET_COUNT, Promise.resolve(auth))
       .then((quest) => {
         if (requestId === homeRequestId) {
-          renderQuestDashboard(container, quest.summary);
+          renderQuestDashboard(container, quest.summary, "", quest.memorizedWords);
         }
       })
       .catch(() => {
@@ -78,13 +79,16 @@ function renderQuestDashboard(
   container: HTMLElement,
   summary: DailyQuestSummary | null = null,
   errorMessage = "",
+  memorizedWords: readonly MemorizedWordSummary[] = [],
+  showMemorizedWords = false,
 ): void {
   const targetCount = Math.max(1, summary?.targetCount ?? DAILY_QUEST_TARGET_COUNT);
   const completedCount = Math.max(0, summary?.completedCount ?? 0);
   const progressRatio = Math.min(100, Math.round((completedCount / targetCount) * 100));
   const progressText = summary ? `${completedCount}/${targetCount} 완료` : "퀘스트를 불러오는 중";
-  const questDayText = `${summary?.questDayCount ?? 0}일`;
-  const masteredText = `${summary?.masteredCount ?? 0}단어`;
+  const completedQuestText = `${summary?.dailyQuestCompletedCount ?? 0}회`;
+  const memorizedText = `${summary?.memorizedWordCount ?? 0}단어`;
+  const studyDayText = `${summary?.questDayCount ?? 0}일`;
   const helperText =
     errorMessage ||
     (summary?.remainingCount === 0
@@ -102,14 +106,19 @@ function renderQuestDashboard(
         </div>
         <div class="quest-stats" aria-label="퀘스트 통계">
           <div class="quest-stat">
-            <span class="quest-stat-value">${questDayText}</span>
-            <span class="quest-stat-label">진행</span>
+            <span class="quest-stat-value">${completedQuestText}</span>
+            <span class="quest-stat-label">완료</span>
           </div>
-          <div class="quest-stat">
-            <span class="quest-stat-value">${masteredText}</span>
+          <button class="quest-stat quest-stat-button" type="button" id="memorized-words-button" aria-expanded="${showMemorizedWords}">
+            <span class="quest-stat-value">${memorizedText}</span>
             <span class="quest-stat-label">암기</span>
+          </button>
+          <div class="quest-stat">
+            <span class="quest-stat-value">${studyDayText}</span>
+            <span class="quest-stat-label">학습일</span>
           </div>
         </div>
+        ${showMemorizedWords ? createMemorizedWordsMarkup(memorizedWords) : ""}
         <button class="start-primary" type="button" id="start-button">오늘 퀘스트 시작</button>
         <div class="start-actions">
           <button class="start-link-button" type="button" id="options-button">설정</button>
@@ -124,15 +133,51 @@ function renderQuestDashboard(
   const optionsButton =
     container.querySelector<HTMLButtonElement>("#options-button");
   const status = container.querySelector<HTMLElement>("#popup-status");
+  const memorizedButton =
+    container.querySelector<HTMLButtonElement>("#memorized-words-button");
 
   startButton?.addEventListener("click", () => {
     homeRequestId += 1;
     void startPopupQuiz(container, status);
   });
 
+  memorizedButton?.addEventListener("click", () => {
+    renderQuestDashboard(
+      container,
+      summary,
+      errorMessage,
+      memorizedWords,
+      !showMemorizedWords,
+    );
+  });
+
   optionsButton?.addEventListener("click", () => {
     chromeApi?.runtime?.openOptionsPage();
   });
+}
+
+function createMemorizedWordsMarkup(words: readonly MemorizedWordSummary[]): string {
+  if (words.length === 0) {
+    return `<p class="quest-list-empty">아직 암기한 단어가 없습니다.</p>`;
+  }
+
+  return `
+    <div class="quest-word-list" aria-label="암기한 단어 목록">
+      ${words
+        .map(
+          (word) => `
+            <div class="quest-word-item">
+              <span>
+                <strong>${escapeHtml(word.key)}</strong>
+                <small>${escapeHtml(word.wordbookName)}</small>
+              </span>
+              <em>${escapeHtml(word.value)}</em>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
 }
 
 function renderLoginRequired(container: HTMLElement): void {

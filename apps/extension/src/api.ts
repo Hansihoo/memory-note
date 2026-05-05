@@ -27,20 +27,43 @@ export interface DailyQuestSummary {
   targetCount: number;
   completedCount: number;
   remainingCount: number;
+  dailyQuestCompleted: boolean;
+  dailyQuestCompletedCount: number;
   questDayCount: number;
+  memorizedWordCount: number;
   masteredCount: number;
   todayStudiedCount: number;
   estimatedMinutes: number;
 }
 
+export interface MemorizedWordSummary {
+  wordId: string;
+  wordbookId: string;
+  wordbookName: string;
+  key: string;
+  value: string;
+  knownCount: number;
+  lastStudiedAt: string | null;
+}
+
 export interface DailyQuest {
   summary: DailyQuestSummary;
   cards: MemoryCard[];
+  memorizedWords: MemorizedWordSummary[];
 }
 
 interface ServerDailyQuestResponse {
   summary?: Partial<DailyQuestSummary>;
   cards?: ServerTodayStudyCard[];
+  memorizedWords?: Array<{
+    wordId: number | string;
+    wordbookId: number | string;
+    wordbookName?: string | null;
+    key?: string | null;
+    value?: string | null;
+    knownCount?: number;
+    lastStudiedAt?: string | null;
+  }>;
 }
 
 export class ExtensionAuthMissingError extends Error {
@@ -108,6 +131,7 @@ export async function loadDailyQuest(
   return {
     summary: normalizeDailyQuestSummary(body.summary, targetCount),
     cards: (body.cards ?? []).map(serverCardToMemoryCard).filter((card) => card.prompt && card.answer),
+    memorizedWords: (body.memorizedWords ?? []).map(serverMemorizedWordToSummary).filter((word) => word.key),
   };
 }
 
@@ -188,10 +212,25 @@ function normalizeDailyQuestSummary(
     targetCount,
     completedCount,
     remainingCount: coerceNumber(summary?.remainingCount, Math.max(0, targetCount - completedCount)),
+    dailyQuestCompleted: summary?.dailyQuestCompleted === true || completedCount >= targetCount,
+    dailyQuestCompletedCount: coerceNumber(summary?.dailyQuestCompletedCount, 0),
     questDayCount: coerceNumber(summary?.questDayCount, 0),
+    memorizedWordCount: coerceNumber(summary?.memorizedWordCount, 0),
     masteredCount: coerceNumber(summary?.masteredCount, 0),
     todayStudiedCount: coerceNumber(summary?.todayStudiedCount, completedCount),
     estimatedMinutes: coerceNumber(summary?.estimatedMinutes, 0),
+  };
+}
+
+function serverMemorizedWordToSummary(word: NonNullable<ServerDailyQuestResponse["memorizedWords"]>[number]): MemorizedWordSummary {
+  return {
+    wordId: String(word.wordId),
+    wordbookId: String(word.wordbookId),
+    wordbookName: String(word.wordbookName ?? ""),
+    key: String(word.key ?? "").trim(),
+    value: String(word.value ?? "").trim(),
+    knownCount: coerceNumber(word.knownCount, 0),
+    lastStudiedAt: word.lastStudiedAt ?? null,
   };
 }
 

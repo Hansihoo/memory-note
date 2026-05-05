@@ -92,6 +92,7 @@ interface ServerProfileSummary {
   }>;
   masteredCount?: number;
   weakCardCount?: number;
+  dailyQuestCompletedCount?: number;
   longTermReviewCount30d?: number;
   longTermCorrectCount30d?: number;
   longTermRecallRate30d?: number | null;
@@ -242,6 +243,7 @@ function mapProfile(summary: ServerProfileSummary): ProfileSummary {
     })),
     masteredCount: summary.masteredCount ?? 0,
     weakCardCount: summary.weakCardCount ?? 0,
+    dailyQuestCompletedCount: summary.dailyQuestCompletedCount ?? 0,
     longTermReviewCount30d: summary.longTermReviewCount30d ?? 0,
     longTermCorrectCount30d: summary.longTermCorrectCount30d ?? 0,
     longTermRecallRate30d: summary.longTermRecallRate30d ?? 0,

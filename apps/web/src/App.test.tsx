@@ -78,6 +78,7 @@ describe("App", () => {
         return jsonResponse({
           cumulativeLearningDays: 2,
           todayStudiedCount: 1,
+          dailyQuestCompletedCount: 3,
           memorizedWordCount: 1,
           memorizedWords: [
             {
@@ -144,6 +145,8 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "읽어주기 켜기" })).toBeDisabled();
 
     await userEvent.click(screen.getByRole("button", { name: "프로필" }));
+    expect(screen.getByText("퀘스트 완료")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /외운 단어/ }));
     expect(screen.getByRole("heading", { name: "외운 단어" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "실수 노트" })).toBeInTheDocument();
     expect(screen.getAllByText("airport").length).toBeGreaterThanOrEqual(1);
@@ -248,6 +251,7 @@ describe("App", () => {
         return jsonResponse({
           cumulativeLearningDays: 1,
           todayStudiedCount: 1,
+          dailyQuestCompletedCount: 0,
           memorizedWordCount: 0,
           memorizedWords: [],
           recentWordbooks: []

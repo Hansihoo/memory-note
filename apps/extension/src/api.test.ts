@@ -79,11 +79,25 @@ describe("extension api", () => {
           targetCount: 5,
           completedCount: 2,
           remainingCount: 3,
+          dailyQuestCompleted: false,
+          dailyQuestCompletedCount: 4,
           questDayCount: 7,
+          memorizedWordCount: 12,
           masteredCount: 12,
           todayStudiedCount: 2,
           estimatedMinutes: 2,
         },
+        memorizedWords: [
+          {
+            wordId: 10,
+            wordbookId: 1,
+            wordbookName: "Travel",
+            key: "departure",
+            value: "출발",
+            knownCount: 3,
+            lastStudiedAt: "2026-05-05T00:00:00Z",
+          },
+        ],
         cards: [
           {
             cardId: 100,
@@ -103,11 +117,25 @@ describe("extension api", () => {
         targetCount: 5,
         completedCount: 2,
         remainingCount: 3,
+        dailyQuestCompleted: false,
+        dailyQuestCompletedCount: 4,
         questDayCount: 7,
+        memorizedWordCount: 12,
         masteredCount: 12,
         todayStudiedCount: 2,
         estimatedMinutes: 2,
       },
+      memorizedWords: [
+        {
+          wordId: "10",
+          wordbookId: "1",
+          wordbookName: "Travel",
+          key: "departure",
+          value: "출발",
+          knownCount: 3,
+          lastStudiedAt: "2026-05-05T00:00:00Z",
+        },
+      ],
       cards: [
         {
           id: "100",

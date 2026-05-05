@@ -560,7 +560,8 @@ def test_study_today_returns_summary_filters_wordbook_and_spreads_related_cards(
 
 def test_daily_quest_summary_tracks_progress_and_distinct_mastered_items(client, auth_headers):
     from app.database import SessionLocal
-    from app.models import Card, ReviewState
+    from app.models import Card, ReviewLog, ReviewState
+    from app.security import utcnow
 
     wordbook = client.post("/wordbooks", json={"name": "Quest"}, headers=auth_headers).json()
     client.post(f"/wordbooks/{wordbook['id']}/words", json={"key": "quest", "value": "mission"}, headers=auth_headers)
@@ -571,13 +572,18 @@ def test_daily_quest_summary_tracks_progress_and_distinct_mastered_items(client,
     assert body["summary"]["targetCount"] == 25
     assert body["summary"]["completedCount"] == 0
     assert body["summary"]["remainingCount"] == 25
+    assert body["summary"]["dailyQuestCompleted"] is False
+    assert body["summary"]["dailyQuestCompletedCount"] == 0
     assert body["summary"]["questDayCount"] == 0
+    assert body["summary"]["memorizedWordCount"] == 0
     assert body["summary"]["masteredCount"] == 0
     assert body["summary"]["estimatedMinutes"] >= 3
+    assert body["memorizedWords"] == []
     assert len(body["cards"]) >= 1
 
+    card_id = body["cards"][0]["cardId"]
     client.post(
-        f"/study/cards/{body['cards'][0]['cardId']}/review",
+        f"/study/cards/{card_id}/review",
         json={"rating": "GOOD", "clientEventId": "daily-quest-good-1"},
         headers=auth_headers,
     )
@@ -585,15 +591,48 @@ def test_daily_quest_summary_tracks_progress_and_distinct_mastered_items(client,
     assert progressed["summary"]["completedCount"] == 1
     assert progressed["summary"]["todayStudiedCount"] == 1
     assert progressed["summary"]["questDayCount"] == 1
+    assert progressed["summary"]["dailyQuestCompletedCount"] == 0
+    assert progressed["summary"]["memorizedWordCount"] == 1
+    assert len(progressed["memorizedWords"]) == 1
 
     client.post(
-        f"/study/cards/{body['cards'][0]['cardId']}/review",
+        f"/study/cards/{card_id}/review",
         json={"rating": "GOOD", "clientEventId": "daily-quest-good-2"},
         headers=auth_headers,
     )
     repeated = client.get("/study/daily-quest", headers=auth_headers).json()
     assert repeated["summary"]["completedCount"] == 2
     assert repeated["summary"]["todayStudiedCount"] == 1
+    db = SessionLocal()
+    try:
+        card = db.query(Card).filter(Card.id == card_id).one()
+        now = utcnow()
+        for index in range(3, 26):
+            db.add(
+                ReviewLog(
+                    user_id=card.user_id,
+                    card_id=card.id,
+                    deck_id=card.wordbook_id,
+                    rating="GOOD",
+                    is_correct=True,
+                    reviewed_at=now,
+                    platform="WEB",
+                    state_before_json={"status": "REVIEW"},
+                    state_after_json={"status": "REVIEW"},
+                    client_event_id=f"daily-quest-good-{index}",
+                )
+            )
+        db.commit()
+    finally:
+        db.close()
+
+    completed = client.get("/study/daily-quest", headers=auth_headers).json()
+    assert completed["summary"]["completedCount"] == 25
+    assert completed["summary"]["remainingCount"] == 0
+    assert completed["summary"]["dailyQuestCompleted"] is True
+    assert completed["summary"]["dailyQuestCompletedCount"] == 1
+    profile = client.get("/profile/summary", headers=auth_headers).json()
+    assert profile["dailyQuestCompletedCount"] == 1
 
     db = SessionLocal()
     try:

@@ -251,6 +251,7 @@ const emptyProfile: ProfileSummary = {
   recentWordbooks: [],
   masteredCount: 0,
   weakCardCount: 0,
+  dailyQuestCompletedCount: 0,
   longTermReviewCount30d: 0,
   longTermCorrectCount30d: 0,
   longTermRecallRate30d: 0,
@@ -560,6 +561,7 @@ export function App() {
   const [studyQueueLoading, setStudyQueueLoading] = useState(false);
   const [selectedCell, setSelectedCell] = useState<SheetSelection | null>(null);
   const [homeView, setHomeView] = useState<HomeView>("study");
+  const [showMemorizedWords, setShowMemorizedWords] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [appError, setAppError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -1661,9 +1663,18 @@ export function App() {
                 <span>{summary.todayStudiedCount}</span>
                 <small>오늘 학습한 단어</small>
               </div>
-              <div>
+              <button
+                className="profile-stat-button"
+                type="button"
+                onClick={() => setShowMemorizedWords((current) => !current)}
+                aria-expanded={showMemorizedWords}
+              >
                 <span>{summary.memorizedWordCount}</span>
                 <small>외운 단어</small>
+              </button>
+              <div>
+                <span>{summary.dailyQuestCompletedCount}</span>
+                <small>퀘스트 완료</small>
               </div>
             </div>
             <section className="memorized-list" aria-label="장기 기억 통계">
@@ -1687,7 +1698,7 @@ export function App() {
                 </div>
               </div>
             </section>
-            <section className="memorized-list" aria-label="외운 단어 목록">
+            <section className="memorized-list" aria-label="외운 단어 목록" hidden={!showMemorizedWords}>
               <h2>외운 단어</h2>
               {summary.memorizedWords.length > 0 ? (
                 summary.memorizedWords.map((word) => (

@@ -373,15 +373,13 @@ class DailyQuestSummary(ApiModel):
     target_count: int = Field(alias="targetCount")
     completed_count: int = Field(alias="completedCount")
     remaining_count: int = Field(alias="remainingCount")
+    daily_quest_completed: bool = Field(alias="dailyQuestCompleted")
+    daily_quest_completed_count: int = Field(alias="dailyQuestCompletedCount")
     quest_day_count: int = Field(alias="questDayCount")
+    memorized_word_count: int = Field(alias="memorizedWordCount")
     mastered_count: int = Field(alias="masteredCount")
     today_studied_count: int = Field(alias="todayStudiedCount")
     estimated_minutes: int = Field(alias="estimatedMinutes")
-
-
-class DailyQuestResponse(ApiModel):
-    summary: DailyQuestSummary
-    cards: List[TodayStudyCard]
 
 
 class CardReviewRequest(BaseModel):
@@ -430,6 +428,12 @@ class MemorizedWordSummary(ApiModel):
     last_studied_at: Optional[datetime] = Field(None, alias="lastStudiedAt")
 
 
+class DailyQuestResponse(ApiModel):
+    summary: DailyQuestSummary
+    cards: List[TodayStudyCard]
+    memorized_words: List[MemorizedWordSummary] = Field(default_factory=list, alias="memorizedWords")
+
+
 class ProfileSummary(ApiModel):
     cumulative_learning_days: int = Field(alias="cumulativeLearningDays")
     today_studied_count: int = Field(alias="todayStudiedCount")
@@ -438,6 +442,7 @@ class ProfileSummary(ApiModel):
     recent_wordbooks: List[WordbookStudySummary] = Field(alias="recentWordbooks")
     mastered_count: Optional[int] = Field(None, alias="masteredCount")
     weak_card_count: Optional[int] = Field(None, alias="weakCardCount")
+    daily_quest_completed_count: Optional[int] = Field(None, alias="dailyQuestCompletedCount")
     long_term_review_count_30d: Optional[int] = Field(None, alias="longTermReviewCount30d")
     long_term_correct_count_30d: Optional[int] = Field(None, alias="longTermCorrectCount30d")
     long_term_recall_rate_30d: Optional[float] = Field(None, alias="longTermRecallRate30d")

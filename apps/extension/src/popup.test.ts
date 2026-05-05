@@ -68,11 +68,25 @@ describe("popup", () => {
             targetCount: 25,
             completedCount: 2,
             remainingCount: 23,
+            dailyQuestCompleted: false,
+            dailyQuestCompletedCount: 4,
             questDayCount: 7,
+            memorizedWordCount: 12,
             masteredCount: 12,
             todayStudiedCount: 2,
             estimatedMinutes: 2,
           },
+          memorizedWords: [
+            {
+              wordId: 10,
+              wordbookId: 1,
+              wordbookName: "Travel",
+              key: "departure",
+              value: "출발",
+              knownCount: 3,
+              lastStudiedAt: "2026-05-05T00:00:00Z",
+            },
+          ],
           cards: cards.slice(0, 5),
         });
       }
@@ -103,8 +117,12 @@ describe("popup", () => {
 
     expect(document.querySelector(".login-status")).toBeNull();
     expect(document.querySelector(".quest-stats")?.textContent).toContain("7일");
+    expect(document.querySelector(".quest-stats")?.textContent).toContain("4회");
     expect(document.querySelector(".quest-stats")?.textContent).toContain("12단어");
     expect(document.body.classList.contains("start-popup")).toBe(true);
+
+    document.querySelector<HTMLButtonElement>("#memorized-words-button")?.click();
+    await waitForElementText(".quest-word-item strong", "departure");
 
     document.querySelector<HTMLButtonElement>("#start-button")?.click();
     await waitForElementText(".quiz-prompt", "word-1");

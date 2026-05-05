@@ -1073,7 +1073,7 @@ textarea:focus {
 
 .profile-stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin: 18px 0;
 }
@@ -1083,11 +1083,24 @@ textarea:focus {
   margin-top: 10px;
 }
 
-.profile-stats div {
+.profile-stats div,
+.profile-stat-button {
   padding: 18px;
   border: 1px solid #dce1ea;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.profile-stat-button {
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.profile-stat-button:hover {
+  border-color: #2f7d5c;
+  background: #f7faf6;
 }
 
 .profile-stats span {

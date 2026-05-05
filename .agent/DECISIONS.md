@@ -7,7 +7,9 @@
   - Expose quest data through a new authenticated additive endpoint rather than changing `/study/today`.
   - Default daily quest target is 25 card review attempts, used as a practical proxy for at least a few minutes of daily study. Completed progress is capped by the daily target for display.
   - Do not add a separate mandatory new-word quota to the daily quest. The existing queue/recommendation algorithm decides what should be checked next.
-  - Quest day count is the existing distinct study/review day count. Memorized word count uses the existing distinct mastered memory item count.
+  - Daily quest completion count is computed from immutable `review_logs` by counting days with at least 25 review attempts. Do not store it by resetting learning state, and do not count duplicate legacy `learning_events` created for compatibility.
+  - Extension and profile surfaces may show memorized word count and a read-only memorized word list from the existing profile summary merge policy.
+  - Quest day count is the existing distinct study/review day count. `masteredCount` uses the existing distinct mastered memory item count, while `memorizedWordCount` follows the existing profile memorized-word merge policy.
   - The Chrome extension popup may show quest progress before quiz start, but review submission, pending queue, token, and auth behavior remain unchanged.
   - The feature must not delete or mutate `review_logs`, `review_states`, legacy words, or learning events.
 - 2026-05-05: Mobile app decisions.
