@@ -1,6 +1,14 @@
 # Agent Decisions
 
 - (template) Record backward-compatible default decisions here with date, context, and rationale.
+- 2026-05-05: Daily quest MVP policy.
+  - Add a Duolingo-like daily quest layer as a backward-compatible additive feature.
+  - Use the existing server-authoritative today study queue as the source for quest cards; do not create a new scheduling engine and do not compute `due_at` on clients.
+  - Expose quest data through a new authenticated additive endpoint rather than changing `/study/today`.
+  - Default daily quest target is 5 cards. Completed progress is based on distinct study/review items completed today and capped by the daily target for display.
+  - Quest day count is the existing distinct study/review day count. Memorized word count uses the existing distinct mastered memory item count.
+  - The Chrome extension popup may show quest progress before quiz start, but review submission, pending queue, token, and auth behavior remain unchanged.
+  - The feature must not delete or mutate `review_logs`, `review_states`, legacy words, or learning events.
 - 2026-05-05: Mobile app decisions.
   - Architecture: Mobile app lives in `apps/mobile`; use Expo + React Native, Expo Router, and pnpm workspace. Reuse `packages/core` for shared study types, ratings, session engine, and pending review event model where practical. Do not duplicate scheduler logic in mobile; the server remains authoritative for scheduling and `due_at` calculation.
   - Mobile MVP scope: Initial mobile scope is study-focused. Include login/register, today study, review submission, pending review queue, mistakes, profile summary, and settings/logout. Exclude full wordbook CRUD, Markdown import/export, course admin, teacher dashboard, group management, and paid content admin from the mobile MVP.

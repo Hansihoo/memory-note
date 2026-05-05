@@ -8,8 +8,10 @@ import {
 
 import {
   ExtensionAuthMissingError,
+  loadDailyQuest,
   loadServerStudyCards,
   submitServerReview,
+  type DailyQuestSummary,
 } from "./api";
 import { createWebAuthUrl, loadExtensionAuth, type WebAuthMode } from "./auth";
 import popupStyles from "./popup.css?inline";
@@ -36,6 +38,8 @@ const chromeApi = (
 const speechDriver = createExtensionSpeechDriver();
 const MIN_QUIZ_TEXT_FONT_SIZE = 8;
 const MAX_MORE_CARD_FETCH_LIMIT = 50;
+const DAILY_QUEST_TARGET_COUNT = 5;
+let homeRequestId = 0;
 
 style.textContent = popupStyles;
 document.head.append(style);
@@ -45,18 +49,72 @@ if (root) {
 }
 
 function renderHome(container: HTMLElement): void {
+  const requestId = (homeRequestId += 1);
   document.body.classList.remove("login-before-popup");
   document.body.classList.add("start-popup");
+  renderQuestDashboard(container);
+
+  void loadExtensionAuth().then((auth) => {
+    if (!auth) {
+      renderLoginRequired(container);
+      return;
+    }
+
+    void loadDailyQuest(DAILY_QUEST_TARGET_COUNT, Promise.resolve(auth))
+      .then((quest) => {
+        if (requestId === homeRequestId) {
+          renderQuestDashboard(container, quest.summary);
+        }
+      })
+      .catch(() => {
+        if (requestId === homeRequestId) {
+          renderQuestDashboard(container, null, "퀘스트 정보를 불러오지 못했어요");
+        }
+      });
+  });
+}
+
+function renderQuestDashboard(
+  container: HTMLElement,
+  summary: DailyQuestSummary | null = null,
+  errorMessage = "",
+): void {
+  const targetCount = Math.max(1, summary?.targetCount ?? DAILY_QUEST_TARGET_COUNT);
+  const completedCount = Math.max(0, summary?.completedCount ?? 0);
+  const progressRatio = Math.min(100, Math.round((completedCount / targetCount) * 100));
+  const progressText = summary ? `${completedCount}/${targetCount} 완료` : "퀘스트를 불러오는 중";
+  const questDayText = `${summary?.questDayCount ?? 0}일`;
+  const masteredText = `${summary?.masteredCount ?? 0}단어`;
+  const helperText =
+    errorMessage ||
+    (summary?.remainingCount === 0
+      ? "오늘 퀘스트를 완료했어요"
+      : "오늘 퀘스트를 바로 시작할 수 있어요");
+
   container.innerHTML = `
     <section class="popup-shell start-shell" aria-labelledby="popup-title">
       <div class="start-card">
         <h1 class="start-title" id="popup-title">Memory Note</h1>
-        <p class="start-status">학습 준비 완료</p>
-        <button class="start-primary" type="button" id="start-button">암기 시작</button>
+        <p class="start-status">오늘 퀘스트</p>
+        <div class="quest-progress" aria-label="오늘 퀘스트 진행률">${progressText}</div>
+        <div class="quest-meter" aria-hidden="true">
+          <span class="quest-meter-fill" style="width: ${progressRatio}%"></span>
+        </div>
+        <div class="quest-stats" aria-label="퀘스트 통계">
+          <div class="quest-stat">
+            <span class="quest-stat-value">${questDayText}</span>
+            <span class="quest-stat-label">진행</span>
+          </div>
+          <div class="quest-stat">
+            <span class="quest-stat-value">${masteredText}</span>
+            <span class="quest-stat-label">암기</span>
+          </div>
+        </div>
+        <button class="start-primary" type="button" id="start-button">오늘 퀘스트 시작</button>
         <div class="start-actions">
           <button class="start-link-button" type="button" id="options-button">설정</button>
         </div>
-        <p class="start-helper" role="status" id="popup-status">오늘 복습을 바로 시작합니다</p>
+        <p class="start-helper${errorMessage ? " error" : ""}" role="status" id="popup-status">${helperText}</p>
       </div>
     </section>
   `;
@@ -68,20 +126,12 @@ function renderHome(container: HTMLElement): void {
   const status = container.querySelector<HTMLElement>("#popup-status");
 
   startButton?.addEventListener("click", () => {
+    homeRequestId += 1;
     void startPopupQuiz(container, status);
   });
 
   optionsButton?.addEventListener("click", () => {
     chromeApi?.runtime?.openOptionsPage();
-  });
-
-  void loadExtensionAuth().then((auth) => {
-    if (!auth) {
-      renderLoginRequired(container);
-      return;
-    }
-
-    void startPopupQuiz(container, status);
   });
 }
 

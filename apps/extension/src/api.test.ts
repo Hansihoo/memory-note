@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ExtensionAuthMissingError,
+  loadDailyQuest,
   loadServerStudyCards,
   ratingFromQuizMark,
   submitServerReview,
@@ -66,6 +67,57 @@ describe("extension api", () => {
       },
     ]);
     expect(globalThis.fetch).toHaveBeenCalledWith("http://localhost:8000/study/today?limit=5", {
+      headers: { Authorization: "Bearer token-1" },
+    });
+  });
+
+  it("loads daily quest summary and cards", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      await jsonResponse({
+        summary: {
+          questDate: "2026-05-05",
+          targetCount: 5,
+          completedCount: 2,
+          remainingCount: 3,
+          questDayCount: 7,
+          masteredCount: 12,
+          todayStudiedCount: 2,
+          estimatedMinutes: 2,
+        },
+        cards: [
+          {
+            cardId: 100,
+            memoryItemId: 51,
+            wordbookId: 1,
+            cardType: "BASIC_KEY_TO_VALUE",
+            prompt: "quest",
+            answer: "mission",
+          },
+        ],
+      }),
+    );
+
+    await expect(loadDailyQuest(5, Promise.resolve(auth))).resolves.toEqual({
+      summary: {
+        questDate: "2026-05-05",
+        targetCount: 5,
+        completedCount: 2,
+        remainingCount: 3,
+        questDayCount: 7,
+        masteredCount: 12,
+        todayStudiedCount: 2,
+        estimatedMinutes: 2,
+      },
+      cards: [
+        {
+          id: "100",
+          prompt: "quest",
+          answer: "mission",
+          source: "server:1:51:BASIC_KEY_TO_VALUE",
+        },
+      ],
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith("http://localhost:8000/study/daily-quest?limit=5", {
       headers: { Authorization: "Bearer token-1" },
     });
   });

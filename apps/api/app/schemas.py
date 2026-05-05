@@ -368,6 +368,22 @@ class TodayStudyResponse(ApiModel):
     cards: List[TodayStudyCard]
 
 
+class DailyQuestSummary(ApiModel):
+    quest_date: str = Field(alias="questDate")
+    target_count: int = Field(alias="targetCount")
+    completed_count: int = Field(alias="completedCount")
+    remaining_count: int = Field(alias="remainingCount")
+    quest_day_count: int = Field(alias="questDayCount")
+    mastered_count: int = Field(alias="masteredCount")
+    today_studied_count: int = Field(alias="todayStudiedCount")
+    estimated_minutes: int = Field(alias="estimatedMinutes")
+
+
+class DailyQuestResponse(ApiModel):
+    summary: DailyQuestSummary
+    cards: List[TodayStudyCard]
+
+
 class CardReviewRequest(BaseModel):
     rating: ReviewRating
     confidence: Optional[int] = None

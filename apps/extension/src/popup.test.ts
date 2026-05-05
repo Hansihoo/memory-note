@@ -44,7 +44,7 @@ describe("popup", () => {
     delete (globalThis as typeof globalThis & { chrome?: unknown }).chrome;
   });
 
-  it("starts a quiz automatically when token is present and can load more cards", async () => {
+  it("shows daily quest progress before starting a quiz and can load more cards", async () => {
     document.body.innerHTML = `<div id="memory-note-popup-root"></div>`;
     const openOptionsPage = vi.fn();
     const cards = Array.from({ length: 10 }, (_, index) => ({
@@ -61,6 +61,21 @@ describe("popup", () => {
     }));
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
       const url = new URL(String(input));
+      if (url.pathname === "/study/daily-quest") {
+        return jsonResponse({
+          summary: {
+            questDate: "2026-05-05",
+            targetCount: 5,
+            completedCount: 2,
+            remainingCount: 3,
+            questDayCount: 7,
+            masteredCount: 12,
+            todayStudiedCount: 2,
+            estimatedMinutes: 2,
+          },
+          cards: cards.slice(0, 5),
+        });
+      }
       if (url.pathname === "/study/today") {
         const limit = Number(url.searchParams.get("limit") ?? 5);
         return jsonResponse({ cards: cards.slice(0, limit) });
@@ -84,9 +99,16 @@ describe("popup", () => {
     };
 
     await import("./popup");
-    await waitForElementText(".quiz-prompt", "word-1");
+    await waitForElementText(".quest-progress", "2/5 완료");
 
     expect(document.querySelector(".login-status")).toBeNull();
+    expect(document.querySelector(".quest-stats")?.textContent).toContain("7일");
+    expect(document.querySelector(".quest-stats")?.textContent).toContain("12단어");
+    expect(document.body.classList.contains("start-popup")).toBe(true);
+
+    document.querySelector<HTMLButtonElement>("#start-button")?.click();
+    await waitForElementText(".quiz-prompt", "word-1");
+
     expect(document.body.classList.contains("start-popup")).toBe(false);
 
     for (let index = 0; index < 5; index += 1) {

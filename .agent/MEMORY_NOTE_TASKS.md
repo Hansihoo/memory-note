@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase M6
+- Completed through: Phase Q1
 - Active phase: None
-- Next task: None — all listed phases and mobile phases are complete
+- Next task: None - daily quest MVP complete
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -356,7 +356,31 @@ Acceptance Criteria:
 - Loading/error/empty states are not broken.
 - Full CI passes or closest available validation passes with documented limitations.
 
+## Phase Q1 - Daily Quest MVP
+Status: Completed
+
+Goal:
+Add a Duolingo-like daily quest layer that gives users a compact daily study goal and shows quest progress in the Chrome extension popup.
+
+TODO:
+- [x] Q1.1 Add daily quest API summary.
+- [x] Q1.2 Add extension daily quest API client.
+- [x] Q1.3 Show daily quest dashboard in Chrome popup.
+- [x] Q1.4 Add tests and validation.
+
+Acceptance Criteria:
+- Daily quest data is exposed through an additive authenticated API endpoint.
+- Existing `/study/today` response shape remains unchanged.
+- Daily quest cards reuse the existing server-authoritative today queue.
+- Chrome extension popup shows today's quest progress, quest days, and mastered word count before starting quiz.
+- Extension review submission, auth/token handling, and pending queue behavior remain unchanged.
+
 ## Work Log
+- Q1.1 done: added additive `/study/daily-quest` API with a 5-card default target, today progress, quest day count, mastered count, and cards from the existing server-authoritative today queue. Files changed: `apps/api/app/main.py`, `apps/api/app/schemas.py`. Files/functions inspected: `study_today`, `today_cards_query`, `today_summary`, `profile_study_days`, `profile_studied_today`, `profile_mastered_count`. Validation: `python -m pytest apps/api/tests/test_api.py -q`, `python -m ruff check apps/api`, and `pnpm run ci` passed.
+- Q1.2 done: added extension `loadDailyQuest` API client and null-safe summary normalization without changing review submission/auth/pending queue logic. Files changed: `apps/extension/src/api.ts`, `apps/extension/src/api.test.ts`. Validation: `pnpm -C apps/extension typecheck`, `pnpm -C apps/extension test:unit`, and `pnpm run ci` passed.
+- Q1.3 done: updated Chrome popup signed-in home to show today's quest progress, quest day count, mastered word count, and a single start CTA before quiz launch. Files changed: `apps/extension/src/popup.ts`, `apps/extension/src/popup.css`, `apps/extension/src/popup.test.ts`. Validation: `pnpm -C apps/extension build`, `pnpm -C apps/extension test:unit -- --reporter=dot`, and `pnpm run ci` passed.
+- Q1.4 done: added API and extension regression tests for daily quest summary/progress/distinct mastered item counting and popup start behavior. Full validation: `pnpm run ci` passed. Next TODO: None.
+
 - Initial state file created. Phase 1 and Phase 2 marked complete. Phase 3 is active.
 
 - T3.1 완료: StudyQueueService(today_cards_query/order_today_rows/today_summary) 구현 상태 검증.

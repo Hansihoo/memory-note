@@ -558,6 +558,46 @@ def test_study_today_returns_summary_filters_wordbook_and_spreads_related_cards(
     assert all(left != right for left, right in zip(memory_item_ids, memory_item_ids[1:]))
 
 
+def test_daily_quest_summary_tracks_progress_and_distinct_mastered_items(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import Card, ReviewState
+
+    wordbook = client.post("/wordbooks", json={"name": "Quest"}, headers=auth_headers).json()
+    client.post(f"/wordbooks/{wordbook['id']}/words", json={"key": "quest", "value": "mission"}, headers=auth_headers)
+
+    first = client.get("/study/daily-quest?limit=5", headers=auth_headers)
+    assert first.status_code == 200
+    body = first.json()
+    assert body["summary"]["targetCount"] == 5
+    assert body["summary"]["completedCount"] == 0
+    assert body["summary"]["remainingCount"] == 5
+    assert body["summary"]["questDayCount"] == 0
+    assert body["summary"]["masteredCount"] == 0
+    assert len(body["cards"]) >= 1
+
+    client.post(
+        f"/study/cards/{body['cards'][0]['cardId']}/review",
+        json={"rating": "GOOD", "clientEventId": "daily-quest-good-1"},
+        headers=auth_headers,
+    )
+    progressed = client.get("/study/daily-quest?limit=5", headers=auth_headers).json()
+    assert progressed["summary"]["completedCount"] == 1
+    assert progressed["summary"]["todayStudiedCount"] == 1
+    assert progressed["summary"]["questDayCount"] == 1
+
+    db = SessionLocal()
+    try:
+        states = db.query(ReviewState).join(Card, Card.id == ReviewState.card_id).filter(Card.wordbook_id == wordbook["id"]).all()
+        for state in states:
+            state.status = "MASTERED"
+        db.commit()
+    finally:
+        db.close()
+
+    mastered = client.get("/study/daily-quest?limit=5", headers=auth_headers).json()
+    assert mastered["summary"]["masteredCount"] == 1
+
+
 def test_analytics_summary_and_recommendation_signals(client, auth_headers):
     from app.database import SessionLocal
     from app.models import ReviewState

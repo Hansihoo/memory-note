@@ -168,7 +168,7 @@ body.start-popup {
 .login-primary {
   width: 100%;
   min-height: 44px;
-  margin-top: 24px;
+  margin-top: 18px;
   color: #fff;
   background: #2f7d5c;
   border: 0;
@@ -195,6 +195,62 @@ body.start-popup {
 
 .start-actions {
   justify-content: flex-end;
+}
+
+.quest-progress {
+  margin-top: 14px;
+  color: #1f2933;
+  font-size: 24px;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.quest-meter {
+  position: relative;
+  height: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+  background: #e5eee8;
+  border-radius: 999px;
+}
+
+.quest-meter-fill {
+  display: block;
+  height: 100%;
+  background: #2f7d5c;
+  border-radius: inherit;
+}
+
+.quest-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quest-stat {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: #f7faf6;
+  border: 1px solid rgba(47, 125, 92, 0.12);
+  border-radius: 12px;
+}
+
+.quest-stat-value {
+  overflow-wrap: anywhere;
+  color: #1f2933;
+  font-size: 16px;
+  font-weight: 850;
+  line-height: 1.2;
+}
+
+.quest-stat-label {
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.2;
 }
 
 .start-link-button,

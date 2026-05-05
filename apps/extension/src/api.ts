@@ -22,6 +22,27 @@ interface ServerTodayStudyResponse {
   cards?: ServerTodayStudyCard[];
 }
 
+export interface DailyQuestSummary {
+  questDate: string;
+  targetCount: number;
+  completedCount: number;
+  remainingCount: number;
+  questDayCount: number;
+  masteredCount: number;
+  todayStudiedCount: number;
+  estimatedMinutes: number;
+}
+
+export interface DailyQuest {
+  summary: DailyQuestSummary;
+  cards: MemoryCard[];
+}
+
+interface ServerDailyQuestResponse {
+  summary?: Partial<DailyQuestSummary>;
+  cards?: ServerTodayStudyCard[];
+}
+
 export class ExtensionAuthMissingError extends Error {
   constructor() {
     super("Memory Note login is not connected.");
@@ -60,6 +81,34 @@ export async function loadServerStudyCards(
 
   const body = (await response.json()) as ServerTodayStudyResponse;
   return (body.cards ?? []).map(serverCardToMemoryCard).filter((card) => card.prompt && card.answer);
+}
+
+export async function loadDailyQuest(
+  limit: number,
+  authPromise: Promise<ExtensionAuth | null> = loadExtensionAuth(),
+): Promise<DailyQuest> {
+  const auth = await authPromise;
+  if (!auth) {
+    throw new ExtensionAuthMissingError();
+  }
+
+  const targetCount = Math.max(1, limit);
+  const params = new URLSearchParams({ limit: String(targetCount) });
+  const response = await fetch(`${auth.apiBaseUrl}/study/daily-quest?${params.toString()}`, {
+    headers: {
+      Authorization: `Bearer ${auth.token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new ExtensionApiError(`Daily quest request failed with ${response.status}`);
+  }
+
+  const body = (await response.json()) as ServerDailyQuestResponse;
+  return {
+    summary: normalizeDailyQuestSummary(body.summary, targetCount),
+    cards: (body.cards ?? []).map(serverCardToMemoryCard).filter((card) => card.prompt && card.answer),
+  };
 }
 
 export async function submitServerReview(
@@ -126,4 +175,26 @@ function serverCardToMemoryCard(card: ServerTodayStudyCard): MemoryCard {
     answer: String(card.answer ?? "").trim(),
     source: `server:${card.wordbookId}:${card.memoryItemId}:${card.cardType}`,
   };
+}
+
+function normalizeDailyQuestSummary(
+  summary: Partial<DailyQuestSummary> | undefined,
+  fallbackTargetCount: number,
+): DailyQuestSummary {
+  const targetCount = coerceNumber(summary?.targetCount, fallbackTargetCount);
+  const completedCount = coerceNumber(summary?.completedCount, 0);
+  return {
+    questDate: String(summary?.questDate ?? ""),
+    targetCount,
+    completedCount,
+    remainingCount: coerceNumber(summary?.remainingCount, Math.max(0, targetCount - completedCount)),
+    questDayCount: coerceNumber(summary?.questDayCount, 0),
+    masteredCount: coerceNumber(summary?.masteredCount, 0),
+    todayStudiedCount: coerceNumber(summary?.todayStudiedCount, completedCount),
+    estimatedMinutes: coerceNumber(summary?.estimatedMinutes, 0),
+  };
+}
+
+function coerceNumber(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }

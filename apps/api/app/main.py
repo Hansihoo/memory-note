@@ -85,6 +85,8 @@ from .schemas import (
     CardReviewResponse,
     CardStatus,
     CardType,
+    DailyQuestResponse,
+    DailyQuestSummary,
     GoogleAuthRequest,
     MemorizedWordSummary,
     MessageResponse,
@@ -149,6 +151,8 @@ ENTITLEMENT_STATUS_EXPIRED = "EXPIRED"
 ENTITLEMENT_SOURCE_MANUAL = "MANUAL"
 ENTITLEMENT_SOURCE_PURCHASE = "PURCHASE"
 ENTITLEMENT_SOURCE_CLASS_LICENSE = "CLASS_LICENSE"
+DEFAULT_DAILY_QUEST_TARGET_COUNT = 5
+MAX_DAILY_QUEST_TARGET_COUNT = 20
 
 
 def create_app() -> FastAPI:
@@ -268,6 +272,33 @@ def today_card_response(card: Card, item: MemoryItem, state: ReviewState) -> Tod
         retrievability=calculate_retrievability(state),
         recommendation_reason=recommendation_reason(state),
         recommendation_score=recommendation_score(state),
+    )
+
+
+def build_today_study_response(
+    db: Session,
+    current_user: User,
+    wordbook_id: Optional[int],
+    limit: int,
+) -> TodayStudyResponse:
+    max_limit = max(1, min(limit, 100))
+    rows = today_cards_query(db, current_user, wordbook_id).all()
+    ordered_base = order_today_rows(rows)
+    sampled_mastered = sample_mastered_check_rows(rows, max_limit)
+    sampled_ids = {row[0].id for row in sampled_mastered}
+    base_without_sampled = [row for row in ordered_base if row[0].id not in sampled_ids]
+    merged = spread_same_item_cards(base_without_sampled + sampled_mastered)
+    ordered_rows = merged[:max_limit]
+    summary = today_summary(db, current_user, wordbook_id)
+    return TodayStudyResponse(
+        summary=TodayStudySummary(
+            due_count=summary["dueCount"],
+            new_count=summary["newCount"],
+            weak_count=summary["weakCount"],
+            estimated_minutes=summary["estimatedMinutes"],
+            mastered_check_count=len([row for row in ordered_rows if row[0].id in sampled_ids]),
+        ),
+        cards=[today_card_response(card, item, state) for card, item, state in ordered_rows],
     )
 
 
@@ -1876,24 +1907,36 @@ def register_routes(api: FastAPI) -> None:
             get_user_wordbook(db, current_user, wordbookId)
         backfill_review_models(db, current_user)
         db.flush()
-        max_limit = max(1, min(limit, 100))
-        rows = today_cards_query(db, current_user, wordbookId).all()
-        ordered_base = order_today_rows(rows)
-        sampled_mastered = sample_mastered_check_rows(rows, max_limit)
-        sampled_ids = {row[0].id for row in sampled_mastered}
-        base_without_sampled = [row for row in ordered_base if row[0].id not in sampled_ids]
-        merged = spread_same_item_cards(base_without_sampled + sampled_mastered)
-        ordered_rows = merged[:max_limit]
-        summary = today_summary(db, current_user, wordbookId)
-        return TodayStudyResponse(
-            summary=TodayStudySummary(
-                due_count=summary["dueCount"],
-                new_count=summary["newCount"],
-                weak_count=summary["weakCount"],
-                estimated_minutes=summary["estimatedMinutes"],
-                mastered_check_count=len([row for row in ordered_rows if row[0].id in sampled_ids]),
+        return build_today_study_response(db, current_user, wordbookId, limit)
+
+    @api.get("/study/daily-quest", response_model=DailyQuestResponse)
+    def study_daily_quest(
+        wordbookId: Optional[int] = None,
+        limit: int = DEFAULT_DAILY_QUEST_TARGET_COUNT,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> DailyQuestResponse:
+        if wordbookId is not None:
+            get_user_wordbook(db, current_user, wordbookId)
+        backfill_review_models(db, current_user)
+        db.flush()
+        target_count = max(1, min(limit, MAX_DAILY_QUEST_TARGET_COUNT))
+        today_response = build_today_study_response(db, current_user, wordbookId, target_count)
+        quest_date = utcnow().date().isoformat()
+        today_studied_count = profile_studied_today(db, current_user.id, quest_date)
+        completed_count = min(today_studied_count, target_count)
+        return DailyQuestResponse(
+            summary=DailyQuestSummary(
+                quest_date=quest_date,
+                target_count=target_count,
+                completed_count=completed_count,
+                remaining_count=max(0, target_count - completed_count),
+                quest_day_count=profile_study_days(db, current_user.id),
+                mastered_count=profile_mastered_count(db, current_user.id),
+                today_studied_count=today_studied_count,
+                estimated_minutes=today_response.summary.estimated_minutes,
             ),
-            cards=[today_card_response(card, item, state) for card, item, state in ordered_rows],
+            cards=today_response.cards,
         )
 
     @api.post("/study/cards/{card_id}/review", response_model=CardReviewResponse)
