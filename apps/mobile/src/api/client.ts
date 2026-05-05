@@ -14,6 +14,19 @@ export interface UserProfile {
   displayName: string;
 }
 
+export interface ProfileSummary {
+  cumulativeLearningDays: number;
+  todayStudiedCount: number;
+  memorizedWordCount: number;
+  masteredCount: number;
+  weakCardCount: number;
+  longTermReviewCount30d: number;
+  longTermCorrectCount30d: number;
+  longTermRecallRate30d: number;
+  masteredLapseCount30d: number;
+  oldMasteredDueCount: number;
+}
+
 interface ServerUser {
   id: number;
   username: string;
@@ -60,6 +73,19 @@ interface ServerReviewResponse {
   leechScore: number;
   reviewLogId?: number | null;
   deduplicated?: boolean;
+}
+
+interface ServerProfileSummary {
+  cumulativeLearningDays: number;
+  todayStudiedCount: number;
+  memorizedWordCount?: number;
+  masteredCount?: number;
+  weakCardCount?: number;
+  longTermReviewCount30d?: number;
+  longTermCorrectCount30d?: number;
+  longTermRecallRate30d?: number | null;
+  masteredLapseCount30d?: number;
+  oldMasteredDueCount?: number;
 }
 
 export class MobileApiError extends Error {
@@ -122,6 +148,21 @@ function mapReviewResponse(response: ServerReviewResponse): ReviewResponse {
   };
 }
 
+function mapProfileSummary(summary: ServerProfileSummary): ProfileSummary {
+  return {
+    cumulativeLearningDays: summary.cumulativeLearningDays,
+    todayStudiedCount: summary.todayStudiedCount,
+    memorizedWordCount: summary.memorizedWordCount ?? 0,
+    masteredCount: summary.masteredCount ?? 0,
+    weakCardCount: summary.weakCardCount ?? 0,
+    longTermReviewCount30d: summary.longTermReviewCount30d ?? 0,
+    longTermCorrectCount30d: summary.longTermCorrectCount30d ?? 0,
+    longTermRecallRate30d: summary.longTermRecallRate30d ?? 0,
+    masteredLapseCount30d: summary.masteredLapseCount30d ?? 0,
+    oldMasteredDueCount: summary.oldMasteredDueCount ?? 0
+  };
+}
+
 async function readErrorMessage(response: Response): Promise<string> {
   return (await response.text().catch(() => "")) || response.statusText || `Request failed with ${response.status}`;
 }
@@ -181,6 +222,14 @@ export function createMobileApiClient(options: MobileApiClientOptions = {}) {
       const params = new URLSearchParams({ limit: String(limit) });
       const response = await request<ServerTodayStudyResponse>(`/study/today?${params.toString()}`);
       return { summary: response.summary, cards: response.cards.map(mapTodayCard) };
+    },
+    async studyMistakes(limit = 20) {
+      const params = new URLSearchParams({ limit: String(limit) });
+      const response = await request<ServerTodayStudyResponse>(`/study/mistakes?${params.toString()}`);
+      return { summary: response.summary, cards: response.cards.map(mapTodayCard) };
+    },
+    async profileSummary() {
+      return mapProfileSummary(await request<ServerProfileSummary>("/profile/summary"));
     },
     async reviewCard(
       cardId: string,

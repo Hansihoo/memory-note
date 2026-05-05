@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase M4
-- Active phase: Phase M5 — Mobile Mistakes and Profile
-- Next task: M5.1 Fetch GET /study/mistakes
+- Completed through: Phase M5
+- Active phase: Phase M6 — Mobile UX Polish
+- Next task: M6.1 Add card-based visual style
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -316,18 +316,18 @@ Acceptance Criteria:
 - Flush oldest first and at most 20 events per run.
 
 ## Phase M5 — Mobile Mistakes and Profile
-Status: Pending
+Status: Completed
 
 Goal:
 Show mistake cards and profile/long-term memory summary.
 
 TODO:
-- [ ] M5.1 Fetch GET /study/mistakes.
-- [ ] M5.2 Render mistakes list.
-- [ ] M5.3 Fetch GET /profile/summary.
-- [ ] M5.4 Render long-term memory stats.
-- [ ] M5.5 Add loading, error, and empty states.
-- [ ] M5.6 Add tests or smoke validation where practical.
+- [x] M5.1 Fetch GET /study/mistakes.
+- [x] M5.2 Render mistakes list.
+- [x] M5.3 Fetch GET /profile/summary.
+- [x] M5.4 Render long-term memory stats.
+- [x] M5.5 Add loading, error, and empty states.
+- [x] M5.6 Add tests or smoke validation where practical.
 
 Acceptance Criteria:
 - Mistake cards are visible.
@@ -495,3 +495,10 @@ Acceptance Criteria:
 - M4.5 done: mobile queue now matches extension retry policy: success removes, network/5xx keeps and increments attempt count, 401/403 preserves queue and returns `auth_required`, 404/409/422 drops, 7-day retention, 200-event cap, oldest-first 20-event flush. Files changed: `apps/mobile/src/pending/pendingReviewQueue.ts`. Files/functions inspected: `apps/extension/src/pending-review.ts`. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M4.6.
 - M4.6 done: added pending queue tests for enqueue, successful retry removal, auth preservation, non-retryable removal, network retry attempt increments, cap/prune, and max 20 flush batch; Expo export smoke validation passed. Files changed: `apps/mobile/src/pending/pendingReviewQueue.test.ts`. Files/functions inspected: extension pending tests. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M5.1.
 - Phase M4 done: Mobile Pending Review Queue validated; Phase M5(Mobile Mistakes and Profile) activated.
+- M5.1 done: added mobile API client call to `GET /study/mistakes`. Files changed: `apps/mobile/src/api/client.ts`. Files/functions inspected: `apps/api/app/schemas.py::TodayStudyResponse`, web `studyMistakes` client. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M5.2.
+- M5.2 done: added `app/mistakes.tsx` to render weak/mistake cards with retry and empty states. Files changed: `apps/mobile/app/mistakes.tsx`, `apps/mobile/app/index.tsx`. Files/functions inspected: mobile route layout. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M5.3.
+- M5.3 done: added `profileSummary` API client mapping for `/profile/summary`. Files changed: `apps/mobile/src/api/client.ts`. Files/functions inspected: `apps/api/app/schemas.py::ProfileSummary`, web profile mapping. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M5.4.
+- M5.4 done: added profile screen with long-term memory stats when available. Files changed: `apps/mobile/app/profile.tsx`. Files/functions inspected: T6.4 long-term stat fields in `.agent/DECISIONS.md`. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M5.5.
+- M5.5 done: mistakes and profile screens include loading, retryable error, and empty states; home links to both screens. Files changed: `apps/mobile/app/mistakes.tsx`, `apps/mobile/app/profile.tsx`, `apps/mobile/app/index.tsx`. Files/functions inspected: mobile UX scope. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M5.6.
+- M5.6 done: added API tests for mistakes mapping and null-safe profile long-term stats plus Expo export smoke validation. Files changed: `apps/mobile/src/api/client.test.ts`. Files/functions inspected: `apps/mobile/vitest.config.ts`. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M6.1.
+- Phase M5 done: Mobile Mistakes and Profile validated; Phase M6(Mobile UX Polish) activated.

@@ -83,6 +83,18 @@ export default function HomeScreen() {
                 <Text style={styles.secondaryButtonText}>설정</Text>
               </Pressable>
             </Link>
+            <View style={styles.linkRow}>
+              <Link href="/mistakes" asChild>
+                <Pressable style={styles.linkPill}>
+                  <Text style={styles.linkPillText}>오답 노트</Text>
+                </Pressable>
+              </Link>
+              <Link href="/profile" asChild>
+                <Pressable style={styles.linkPill}>
+                  <Text style={styles.linkPillText}>프로필</Text>
+                </Pressable>
+              </Link>
+            </View>
           </View>
         ) : (
           <View style={styles.actions}>
@@ -197,6 +209,22 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: "#2F7D5C",
     fontSize: 16,
+    fontWeight: "800"
+  },
+  linkRow: {
+    flexDirection: "row",
+    gap: 10
+  },
+  linkPill: {
+    flex: 1,
+    alignItems: "center",
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 12
+  },
+  linkPillText: {
+    color: "#4B5563",
+    fontSize: 14,
     fontWeight: "800"
   }
 });

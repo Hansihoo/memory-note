@@ -125,4 +125,62 @@ describe("createMobileApiClient", () => {
       })
     );
   });
+
+  it("fetches mistakes and profile summary with null-safe long-term defaults", async () => {
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          summary: { dueCount: 0, newCount: 0, weakCount: 1, estimatedMinutes: 1 },
+          cards: [
+            {
+              cardId: 11,
+              memoryItemId: 10,
+              legacyWordId: 4,
+              wordbookId: 2,
+              cardType: "BASIC_VALUE_TO_KEY",
+              prompt: "안녕",
+              answer: "hello",
+              status: "RELEARNING",
+              dueAt: "2026-05-05T00:00:00Z",
+              lapses: 2,
+              leechScore: 4,
+              retrievability: 0.2
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          cumulativeLearningDays: 5,
+          todayStudiedCount: 3,
+          memorizedWordCount: 9,
+          masteredCount: 4,
+          weakCardCount: 1,
+          longTermReviewCount30d: 0,
+          longTermCorrectCount30d: 0,
+          longTermRecallRate30d: null,
+          masteredLapseCount30d: 0,
+          oldMasteredDueCount: 2
+        })
+      );
+    const api = createMobileApiClient({ baseUrl: "https://api.example.com", fetchImpl });
+
+    await expect(api.studyMistakes(10)).resolves.toMatchObject({
+      summary: { weakCount: 1 },
+      cards: [{ cardId: "11", legacyWordId: "4", lapses: 2 }]
+    });
+    await expect(api.profileSummary()).resolves.toEqual({
+      cumulativeLearningDays: 5,
+      todayStudiedCount: 3,
+      memorizedWordCount: 9,
+      masteredCount: 4,
+      weakCardCount: 1,
+      longTermReviewCount30d: 0,
+      longTermCorrectCount30d: 0,
+      longTermRecallRate30d: 0,
+      masteredLapseCount30d: 0,
+      oldMasteredDueCount: 2
+    });
+  });
 });
