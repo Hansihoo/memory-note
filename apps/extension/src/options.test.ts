@@ -36,14 +36,14 @@ describe("options", () => {
 
     document.querySelector<HTMLButtonElement>("#options-login-button")?.click();
     expect(createTab).toHaveBeenCalledWith({
-      url: "http://localhost:5173/?auth=login&source=extension",
+      url: "https://memory-note-web.vercel.app/?auth=login&source=extension",
     });
 
     document
       .querySelector<HTMLButtonElement>("#options-register-button")
       ?.click();
     expect(createTab).toHaveBeenLastCalledWith({
-      url: "http://localhost:5173/?auth=register&source=extension",
+      url: "https://memory-note-web.vercel.app/?auth=register&source=extension",
     });
   });
 });

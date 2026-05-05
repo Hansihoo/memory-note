@@ -65,6 +65,6 @@ describe("extension auth", () => {
     expect(createWebAuthUrl("register", "https://memory-note.example")).toBe(
       "https://memory-note.example/?auth=register&source=extension",
     );
-    expect(normalizeWebAppUrl("")).toBe("http://localhost:5173");
+    expect(normalizeWebAppUrl("")).toBe("https://memory-note-web.vercel.app");
   });
 });

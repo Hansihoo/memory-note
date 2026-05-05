@@ -2,7 +2,7 @@ import { readChromeLocalStorage, type ExtensionStorageArea } from "./storage";
 
 export const EXTENSION_AUTH_STORAGE_KEY = "memoryNote.extension.auth.v1";
 export const DEFAULT_API_BASE_URL = "http://localhost:8000";
-export const DEFAULT_WEB_APP_URL = "http://localhost:5173";
+export const DEFAULT_WEB_APP_URL = "https://memory-note-web.vercel.app";
 
 const envWebAppUrl = import.meta.env.VITE_WEB_APP_URL as string | undefined;
 
