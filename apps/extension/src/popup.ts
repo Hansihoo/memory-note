@@ -38,7 +38,7 @@ const chromeApi = (
 const speechDriver = createExtensionSpeechDriver();
 const MIN_QUIZ_TEXT_FONT_SIZE = 8;
 const MAX_MORE_CARD_FETCH_LIMIT = 50;
-const DAILY_QUEST_TARGET_COUNT = 5;
+const DAILY_QUEST_TARGET_COUNT = 25;
 let homeRequestId = 0;
 
 style.textContent = popupStyles;

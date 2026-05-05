@@ -151,8 +151,8 @@ ENTITLEMENT_STATUS_EXPIRED = "EXPIRED"
 ENTITLEMENT_SOURCE_MANUAL = "MANUAL"
 ENTITLEMENT_SOURCE_PURCHASE = "PURCHASE"
 ENTITLEMENT_SOURCE_CLASS_LICENSE = "CLASS_LICENSE"
-DEFAULT_DAILY_QUEST_TARGET_COUNT = 5
-MAX_DAILY_QUEST_TARGET_COUNT = 20
+DEFAULT_DAILY_QUEST_TARGET_COUNT = 25
+MAX_DAILY_QUEST_TARGET_COUNT = 100
 
 
 def create_app() -> FastAPI:
@@ -1924,7 +1924,8 @@ def register_routes(api: FastAPI) -> None:
         today_response = build_today_study_response(db, current_user, wordbookId, target_count)
         quest_date = utcnow().date().isoformat()
         today_studied_count = profile_studied_today(db, current_user.id, quest_date)
-        completed_count = min(today_studied_count, target_count)
+        quest_review_count = profile_quest_review_count_today(db, current_user.id, quest_date)
+        completed_count = min(quest_review_count, target_count)
         return DailyQuestResponse(
             summary=DailyQuestSummary(
                 quest_date=quest_date,
@@ -1934,7 +1935,7 @@ def register_routes(api: FastAPI) -> None:
                 quest_day_count=profile_study_days(db, current_user.id),
                 mastered_count=profile_mastered_count(db, current_user.id),
                 today_studied_count=today_studied_count,
-                estimated_minutes=today_response.summary.estimated_minutes,
+                estimated_minutes=max(3, today_response.summary.estimated_minutes),
             ),
             cards=today_response.cards,
         )
@@ -2167,6 +2168,16 @@ def profile_studied_today(db: Session, user_id: int, today: str) -> int:
         .all()
     }
     return len(legacy | review)
+
+
+def profile_quest_review_count_today(db: Session, user_id: int, today: str) -> int:
+    review_count = (
+        db.query(func.count(ReviewLog.id))
+        .filter(ReviewLog.user_id == user_id, func.date(ReviewLog.reviewed_at) == today)
+        .scalar()
+        or 0
+    )
+    return int(review_count)
 
 
 def merged_memorized_word_summaries(db: Session, user_id: int) -> List[MemorizedWordSummary]:

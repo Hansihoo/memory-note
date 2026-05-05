@@ -65,9 +65,9 @@ describe("popup", () => {
         return jsonResponse({
           summary: {
             questDate: "2026-05-05",
-            targetCount: 5,
+            targetCount: 25,
             completedCount: 2,
-            remainingCount: 3,
+            remainingCount: 23,
             questDayCount: 7,
             masteredCount: 12,
             todayStudiedCount: 2,
@@ -99,7 +99,7 @@ describe("popup", () => {
     };
 
     await import("./popup");
-    await waitForElementText(".quest-progress", "2/5 완료");
+    await waitForElementText(".quest-progress", "2/25 완료");
 
     expect(document.querySelector(".login-status")).toBeNull();
     expect(document.querySelector(".quest-stats")?.textContent).toContain("7일");

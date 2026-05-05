@@ -5,7 +5,8 @@
   - Add a Duolingo-like daily quest layer as a backward-compatible additive feature.
   - Use the existing server-authoritative today study queue as the source for quest cards; do not create a new scheduling engine and do not compute `due_at` on clients.
   - Expose quest data through a new authenticated additive endpoint rather than changing `/study/today`.
-  - Default daily quest target is 5 cards. Completed progress is based on distinct study/review items completed today and capped by the daily target for display.
+  - Default daily quest target is 25 card review attempts, used as a practical proxy for at least a few minutes of daily study. Completed progress is capped by the daily target for display.
+  - Do not add a separate mandatory new-word quota to the daily quest. The existing queue/recommendation algorithm decides what should be checked next.
   - Quest day count is the existing distinct study/review day count. Memorized word count uses the existing distinct mastered memory item count.
   - The Chrome extension popup may show quest progress before quiz start, but review submission, pending queue, token, and auth behavior remain unchanged.
   - The feature must not delete or mutate `review_logs`, `review_states`, legacy words, or learning events.

@@ -565,14 +565,15 @@ def test_daily_quest_summary_tracks_progress_and_distinct_mastered_items(client,
     wordbook = client.post("/wordbooks", json={"name": "Quest"}, headers=auth_headers).json()
     client.post(f"/wordbooks/{wordbook['id']}/words", json={"key": "quest", "value": "mission"}, headers=auth_headers)
 
-    first = client.get("/study/daily-quest?limit=5", headers=auth_headers)
+    first = client.get("/study/daily-quest", headers=auth_headers)
     assert first.status_code == 200
     body = first.json()
-    assert body["summary"]["targetCount"] == 5
+    assert body["summary"]["targetCount"] == 25
     assert body["summary"]["completedCount"] == 0
-    assert body["summary"]["remainingCount"] == 5
+    assert body["summary"]["remainingCount"] == 25
     assert body["summary"]["questDayCount"] == 0
     assert body["summary"]["masteredCount"] == 0
+    assert body["summary"]["estimatedMinutes"] >= 3
     assert len(body["cards"]) >= 1
 
     client.post(
@@ -580,10 +581,19 @@ def test_daily_quest_summary_tracks_progress_and_distinct_mastered_items(client,
         json={"rating": "GOOD", "clientEventId": "daily-quest-good-1"},
         headers=auth_headers,
     )
-    progressed = client.get("/study/daily-quest?limit=5", headers=auth_headers).json()
+    progressed = client.get("/study/daily-quest", headers=auth_headers).json()
     assert progressed["summary"]["completedCount"] == 1
     assert progressed["summary"]["todayStudiedCount"] == 1
     assert progressed["summary"]["questDayCount"] == 1
+
+    client.post(
+        f"/study/cards/{body['cards'][0]['cardId']}/review",
+        json={"rating": "GOOD", "clientEventId": "daily-quest-good-2"},
+        headers=auth_headers,
+    )
+    repeated = client.get("/study/daily-quest", headers=auth_headers).json()
+    assert repeated["summary"]["completedCount"] == 2
+    assert repeated["summary"]["todayStudiedCount"] == 1
 
     db = SessionLocal()
     try:
@@ -594,7 +604,7 @@ def test_daily_quest_summary_tracks_progress_and_distinct_mastered_items(client,
     finally:
         db.close()
 
-    mastered = client.get("/study/daily-quest?limit=5", headers=auth_headers).json()
+    mastered = client.get("/study/daily-quest", headers=auth_headers).json()
     assert mastered["summary"]["masteredCount"] == 1
 
 
