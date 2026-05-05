@@ -1,4 +1,5 @@
 import optionsStyles from "./options.css?inline";
+import { createWebAuthUrl, loadExtensionAuth, type WebAuthMode } from "./auth";
 import {
   INTERVAL_HOUR_OPTIONS,
   QUESTIONS_PER_ROUND_OPTIONS,
@@ -7,8 +8,20 @@ import {
   saveExtensionSettings,
 } from "./settings";
 
+interface MemoryNoteChromeApi {
+  tabs?: {
+    create(options: { url: string }): void;
+  };
+}
+
 const root = document.getElementById("memory-note-options-root");
 const style = document.createElement("style");
+const chromeApi = (
+  globalThis as typeof globalThis & {
+    chrome?: MemoryNoteChromeApi;
+  }
+).chrome;
+
 style.textContent = optionsStyles;
 document.head.append(style);
 
@@ -17,7 +30,10 @@ if (root) {
 }
 
 async function renderOptions(container: HTMLElement): Promise<void> {
-  const settings = await loadExtensionSettings();
+  const [settings, auth] = await Promise.all([
+    loadExtensionSettings(),
+    loadExtensionAuth(),
+  ]);
 
   container.innerHTML = `
     <section class="options-shell" aria-labelledby="options-title">
@@ -25,6 +41,19 @@ async function renderOptions(container: HTMLElement): Promise<void> {
       <p class="options-copy">
         웹페이지를 보는 중 암기 풀이 알림이 나타나는 간격과 한 번에 풀 단어 수를 정합니다.
       </p>
+
+      <section class="settings-panel account-panel" aria-labelledby="account-title">
+        <div>
+          <h2 class="panel-title" id="account-title">계정 연결</h2>
+          <p class="panel-copy">
+            ${auth ? "웹 계정과 연결되어 있습니다." : "웹에서 로그인하거나 가입하면 확장 프로그램이 같은 계정을 사용합니다."}
+          </p>
+        </div>
+        <div class="auth-action-row">
+          <button class="auth-button primary-auth-button" type="button" id="options-login-button">웹에서 로그인</button>
+          <button class="auth-button" type="button" id="options-register-button">회원가입</button>
+        </div>
+      </section>
 
       <form class="settings-panel" id="settings-form">
         <label class="setting-row" for="interval-hours">
@@ -65,6 +94,18 @@ async function renderOptions(container: HTMLElement): Promise<void> {
   const status = container.querySelector<HTMLElement>("#settings-status");
   const testNowButton =
     container.querySelector<HTMLButtonElement>("#test-now-button");
+  const loginButton =
+    container.querySelector<HTMLButtonElement>("#options-login-button");
+  const registerButton =
+    container.querySelector<HTMLButtonElement>("#options-register-button");
+
+  loginButton?.addEventListener("click", () => {
+    openWebAuth("login");
+  });
+
+  registerButton?.addEventListener("click", () => {
+    openWebAuth("register");
+  });
 
   form?.addEventListener("submit", (event) => {
     event.preventDefault();
@@ -91,6 +132,10 @@ async function renderOptions(container: HTMLElement): Promise<void> {
         "표시 기록을 초기화했어요. 웹페이지를 새로고침하면 바로 뜹니다.";
     });
   });
+}
+
+function openWebAuth(mode: WebAuthMode): void {
+  chromeApi?.tabs?.create({ url: createWebAuthUrl(mode) });
 }
 
 function createOptionsMarkup(

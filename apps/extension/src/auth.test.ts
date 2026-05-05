@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   EXTENSION_AUTH_STORAGE_KEY,
+  createWebAuthUrl,
   loadExtensionAuth,
   normalizeApiBaseUrl,
+  normalizeWebAppUrl,
   saveExtensionAuth,
 } from "./auth";
 import type { ExtensionStorageArea } from "./storage";
@@ -54,5 +56,15 @@ describe("extension auth", () => {
 
   it("normalizes empty api base urls", () => {
     expect(normalizeApiBaseUrl("")).toBe("http://localhost:8000");
+  });
+
+  it("creates web auth urls for extension login and registration", () => {
+    expect(createWebAuthUrl("login", "https://memory-note.example/app/")).toBe(
+      "https://memory-note.example/app?auth=login&source=extension",
+    );
+    expect(createWebAuthUrl("register", "https://memory-note.example")).toBe(
+      "https://memory-note.example/?auth=register&source=extension",
+    );
+    expect(normalizeWebAppUrl("")).toBe("http://localhost:5173");
   });
 });

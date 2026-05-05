@@ -17,6 +17,15 @@ describe("App", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     localStorage.clear();
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("opens the registration tab from extension auth links", () => {
+    window.history.replaceState({}, "", "/?auth=register&source=extension");
+
+    render(<App />);
+
+    expect(screen.getByRole("button", { name: "가입하기" })).toBeInTheDocument();
   });
 
   it("opens the home screen by pressing start", async () => {

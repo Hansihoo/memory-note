@@ -79,6 +79,43 @@ body {
   background: #e2eee5;
 }
 
+.auth-actions {
+  display: grid;
+  gap: 8px;
+  margin: 10px 8px 0 12px;
+}
+
+.auth-actions[hidden] {
+  display: none;
+}
+
+.auth-button {
+  width: 100%;
+  min-height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  color: #27624f;
+  background: #fffdf7;
+  border: 1px solid rgba(39, 98, 79, 0.24);
+}
+
+.auth-button:hover {
+  background: #eef5ef;
+}
+
+.primary-auth-button {
+  color: #fffdf7;
+  background: #1f6f57;
+  border: 0;
+}
+
+.primary-auth-button:hover {
+  background: #185944;
+}
+
 .status-text {
   min-height: 16px;
   margin: 10px 0 0;

@@ -10,7 +10,7 @@ import {
   loadServerStudyCards,
   submitServerReview,
 } from "./api";
-import { loadExtensionAuth } from "./auth";
+import { createWebAuthUrl, loadExtensionAuth, type WebAuthMode } from "./auth";
 import popupStyles from "./popup.css?inline";
 import { loadExtensionSettings, recordMiniQuizShown } from "./settings";
 import { createExtensionSpeechDriver } from "./speech";
@@ -19,6 +19,9 @@ import { enqueuePendingReview, flushPendingReviews } from "./pending-review";
 interface MemoryNoteChromeApi {
   runtime?: {
     openOptionsPage(callback?: () => void): void;
+  };
+  tabs?: {
+    create(options: { url: string }): void;
   };
 }
 
@@ -46,6 +49,10 @@ function renderHome(container: HTMLElement): void {
         <button class="start-button" type="button" id="start-button">암기 시작</button>
         <button class="options-button" type="button" id="options-button">설정</button>
       </div>
+      <div class="auth-actions" id="auth-actions" hidden>
+        <button class="auth-button primary-auth-button" type="button" id="login-button">웹에서 로그인</button>
+        <button class="auth-button" type="button" id="register-button">회원가입</button>
+      </div>
       <p class="status-text" role="status" id="popup-status"></p>
     </section>
   `;
@@ -54,6 +61,11 @@ function renderHome(container: HTMLElement): void {
     container.querySelector<HTMLButtonElement>("#start-button");
   const optionsButton =
     container.querySelector<HTMLButtonElement>("#options-button");
+  const loginButton =
+    container.querySelector<HTMLButtonElement>("#login-button");
+  const registerButton =
+    container.querySelector<HTMLButtonElement>("#register-button");
+  const authActions = container.querySelector<HTMLElement>("#auth-actions");
   const status = container.querySelector<HTMLElement>("#popup-status");
 
   startButton?.addEventListener("click", () => {
@@ -64,12 +76,30 @@ function renderHome(container: HTMLElement): void {
     chromeApi?.runtime?.openOptionsPage();
   });
 
+  loginButton?.addEventListener("click", () => {
+    openWebAuth("login");
+  });
+
+  registerButton?.addEventListener("click", () => {
+    openWebAuth("register");
+  });
+
   void loadExtensionAuth().then((auth) => {
     if (!auth) {
       setStatus(status, "웹 앱에서 로그인하면 확장 프로그램과 연결됩니다.", true);
+      if (authActions) {
+        authActions.hidden = false;
+      }
+      return;
     }
+
+    setStatus(status, "웹 계정과 연결되어 있습니다.");
   });
   void flushPendingReviews();
+}
+
+function openWebAuth(mode: WebAuthMode): void {
+  chromeApi?.tabs?.create({ url: createWebAuthUrl(mode) });
 }
 
 async function startPopupQuiz(

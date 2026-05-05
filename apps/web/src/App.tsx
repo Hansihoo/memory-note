@@ -270,6 +270,11 @@ type EditWorkspaceMode = "sheet" | "export";
 type ImportSource = "local" | "google-drive";
 type PasswordAuthMode = "login" | "register";
 
+function getInitialPasswordAuthMode(): PasswordAuthMode {
+  const authMode = new URLSearchParams(window.location.search).get("auth");
+  return authMode === "register" ? "register" : "login";
+}
+
 interface GoogleTokenResponse {
   access_token?: string;
   error?: string;
@@ -533,7 +538,9 @@ export function App() {
   const [summary, setSummary] = useState<ProfileSummary>(emptyProfile);
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
-  const [passwordAuthMode, setPasswordAuthMode] = useState<PasswordAuthMode>("login");
+  const [passwordAuthMode, setPasswordAuthMode] = useState<PasswordAuthMode>(
+    getInitialPasswordAuthMode,
+  );
   const [authError, setAuthError] = useState("");
   const [wordbooks, setWordbooks] = useState<Wordbook[]>([]);
   const [activeWordbookId, setActiveWordbookId] = useState("");

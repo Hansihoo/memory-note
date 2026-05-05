@@ -2,6 +2,15 @@ import { readChromeLocalStorage, type ExtensionStorageArea } from "./storage";
 
 export const EXTENSION_AUTH_STORAGE_KEY = "memoryNote.extension.auth.v1";
 export const DEFAULT_API_BASE_URL = "http://localhost:8000";
+export const DEFAULT_WEB_APP_URL = "http://localhost:5173";
+
+const envWebAppUrl = import.meta.env.VITE_WEB_APP_URL as string | undefined;
+
+export const WEB_APP_URL = normalizeWebAppUrl(
+  envWebAppUrl || DEFAULT_WEB_APP_URL,
+);
+
+export type WebAuthMode = "login" | "register";
 
 export interface ExtensionAuth {
   token: string;
@@ -62,6 +71,26 @@ export function normalizeExtensionAuth(value: unknown): ExtensionAuth | null {
 
 export function normalizeApiBaseUrl(value: string): string {
   return (value.trim() || DEFAULT_API_BASE_URL).replace(/\/$/, "");
+}
+
+export function createWebAuthUrl(
+  mode: WebAuthMode = "login",
+  baseUrl = WEB_APP_URL,
+): string {
+  const url = new URL(normalizeWebAppUrl(baseUrl));
+  url.searchParams.set("auth", mode);
+  url.searchParams.set("source", "extension");
+  return url.toString();
+}
+
+export function normalizeWebAppUrl(value: string): string {
+  const trimmed = (value.trim() || DEFAULT_WEB_APP_URL).replace(/\/$/, "");
+
+  try {
+    return new URL(trimmed).toString().replace(/\/$/, "");
+  } catch {
+    return DEFAULT_WEB_APP_URL;
+  }
 }
 
 function readString(value: unknown): string {

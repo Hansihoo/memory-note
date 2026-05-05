@@ -14,34 +14,34 @@ function memoryStorage(state: Record<string, unknown>): ExtensionStorageArea {
   };
 }
 
-describe("popup", () => {
+describe("options", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.resetModules();
+    document.head.innerHTML = "";
     document.body.innerHTML = "";
     delete (globalThis as typeof globalThis & { chrome?: unknown }).chrome;
   });
 
-  it("shows a connection guide when token is missing", async () => {
-    document.body.innerHTML = `<div id="memory-note-popup-root"></div>`;
+  it("opens web login and registration links", async () => {
+    document.body.innerHTML = `<div id="memory-note-options-root"></div>`;
     const createTab = vi.fn();
     (globalThis as typeof globalThis & { chrome?: unknown }).chrome = {
       storage: { local: memoryStorage({}) },
-      runtime: { openOptionsPage: vi.fn() },
       tabs: { create: createTab },
     };
 
-    await import("./popup");
+    await import("./options");
     await new Promise((resolve) => window.setTimeout(resolve, 0));
 
-    expect(document.querySelector("#popup-status")?.textContent).toContain("로그인");
-
-    document.querySelector<HTMLButtonElement>("#login-button")?.click();
+    document.querySelector<HTMLButtonElement>("#options-login-button")?.click();
     expect(createTab).toHaveBeenCalledWith({
       url: "http://localhost:5173/?auth=login&source=extension",
     });
 
-    document.querySelector<HTMLButtonElement>("#register-button")?.click();
+    document
+      .querySelector<HTMLButtonElement>("#options-register-button")
+      ?.click();
     expect(createTab).toHaveBeenLastCalledWith({
       url: "http://localhost:5173/?auth=register&source=extension",
     });
