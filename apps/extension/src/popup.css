@@ -16,6 +16,11 @@ body {
   margin: 0;
 }
 
+body.login-before-popup {
+  width: 320px;
+  background: #f7faf6;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -79,43 +84,6 @@ body {
   background: #e2eee5;
 }
 
-.auth-actions {
-  display: grid;
-  gap: 8px;
-  margin: 10px 8px 0 12px;
-}
-
-.auth-actions[hidden] {
-  display: none;
-}
-
-.auth-button {
-  width: 100%;
-  min-height: 36px;
-  border-radius: 8px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 850;
-  color: #27624f;
-  background: #fffdf7;
-  border: 1px solid rgba(39, 98, 79, 0.24);
-}
-
-.auth-button:hover {
-  background: #eef5ef;
-}
-
-.primary-auth-button {
-  color: #fffdf7;
-  background: #1f6f57;
-  border: 0;
-}
-
-.primary-auth-button:hover {
-  background: #185944;
-}
-
 .status-text {
   min-height: 16px;
   margin: 10px 0 0;
@@ -126,6 +94,91 @@ body {
 
 .status-text.error {
   color: #9b2d2d;
+}
+
+.login-shell {
+  min-height: 224px;
+  padding: 14px;
+  color: #1f2933;
+  background: #f7faf6;
+}
+
+.login-card {
+  box-sizing: border-box;
+  display: grid;
+  gap: 0;
+  min-height: 196px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid rgba(31, 41, 51, 0.08);
+  border-radius: 17px;
+  box-shadow: 0 16px 34px rgba(31, 41, 51, 0.11);
+}
+
+.login-title {
+  margin: 0;
+  color: #1f2933;
+  font-size: 18px;
+  font-weight: 850;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.login-status {
+  margin: 6px 0 0;
+  color: #1f2933;
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.35;
+}
+
+.login-primary {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 24px;
+  color: #fff;
+  background: #2f7d5c;
+  border: 0;
+  border-radius: 14px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.login-primary:hover {
+  background: #276b4f;
+}
+
+.login-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.login-link-button {
+  min-height: 30px;
+  padding: 0;
+  color: #2f7d5c;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.login-link-button:hover {
+  color: #235f46;
+}
+
+.login-helper {
+  margin: 12px 0 0;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .quiz-shell {
