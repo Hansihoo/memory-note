@@ -519,6 +519,39 @@ def calculate_retrievability(state: ReviewState, now: Optional[datetime] = None)
     return max(0.0, min(1.0, math.exp(-elapsed_days / float(state.stability))))
 
 
+def recommendation_reason(state: ReviewState, now: Optional[datetime] = None) -> str:
+    reference = now or utcnow()
+    due_at = comparable_datetime(state.due_at, datetime.max, reference)
+    if (state.leech_score or 0) >= 3 or (state.lapses or 0) >= 2:
+        return "weak"
+    if state.status == STATUS_MASTERED:
+        return "longTermCheck"
+    if state.due_at is not None and due_at <= reference and state.status != STATUS_NEW:
+        return "due"
+    if state.status == STATUS_NEW:
+        return "new"
+    return "review"
+
+
+def recommendation_score(state: ReviewState, now: Optional[datetime] = None) -> float:
+    reference = now or utcnow()
+    due_at = comparable_datetime(state.due_at, datetime.max, reference)
+    last_reviewed = comparable_datetime(state.last_reviewed_at, datetime.min, reference)
+    overdue_days = max(0.0, (reference - due_at).total_seconds() / 86400) if due_at <= reference else 0.0
+    age_days = max(0.0, (reference - last_reviewed).total_seconds() / 86400) if state.last_reviewed_at else 0.0
+    score = 0.0
+    if state.status == STATUS_NEW:
+        score += 25.0
+    if state.due_at is not None and due_at <= reference and state.status != STATUS_NEW:
+        score += 70.0 + min(overdue_days, 30.0)
+    if state.status == STATUS_MASTERED:
+        score += 20.0 + min(age_days, 30.0) * 0.5
+    score += min(float(state.leech_score or 0), 10.0) * 8.0
+    score += min(float(state.lapses or 0), 10.0) * 5.0
+    score += (1.0 - calculate_retrievability(state, reference)) * 10.0
+    return round(score, 2)
+
+
 def review_card(
     db: Session,
     user: User,
@@ -646,6 +679,7 @@ def order_today_rows(rows: Iterable[Tuple[Card, MemoryItem, ReviewState]], now: 
         last_reviewed = comparable_datetime(state.last_reviewed_at, datetime.min, now)
         return (
             0 if is_due else 1 if not is_new else 2,
+            -recommendation_score(state, now),
             -int(state.leech_score or 0),
             -int(state.lapses or 0),
             last_reviewed,

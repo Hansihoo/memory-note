@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase 13
-- Active phase: Phase 14 (blocked)
-- Next task: T14.1 Add products and entitlements — blocked pending billing/access/admin policy
+- Completed through: Phase 15
+- Active phase: None
+- Next task: None — all listed phases are complete
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -202,24 +202,24 @@ TODO:
 - [x] T13.6 Add permission tests.
 
 ## Phase 14 — Paid Course Content / Entitlements
-Status: Blocked
+Status: Completed
 
 TODO:
-- [ ] T14.1 Add products and entitlements.
-- [ ] T14.2 Add course access checks.
-- [ ] T14.3 Add course start flow.
-- [ ] T14.4 Add admin course management basics.
-- [ ] T14.5 Add tests.
+- [x] T14.1 Add products and entitlements.
+- [x] T14.2 Add course access checks.
+- [x] T14.3 Add course start flow.
+- [x] T14.4 Add admin course management basics.
+- [x] T14.5 Add tests.
 
 ## Phase 15 — Analytics / Recommendation Improvements
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T15.1 Add review analytics.
-- [ ] T15.2 Add card quality analytics.
-- [ ] T15.3 Improve today queue recommendations.
-- [ ] T15.4 Add content quality signals.
-- [ ] T15.5 Add tests.
+- [x] T15.1 Add review analytics.
+- [x] T15.2 Add card quality analytics.
+- [x] T15.3 Improve today queue recommendations.
+- [x] T15.4 Add content quality signals.
+- [x] T15.5 Add tests.
 
 ## Work Log
 - Initial state file created. Phase 1 and Phase 2 marked complete. Phase 3 is active.
@@ -316,3 +316,15 @@ TODO:
 - T13.6 done: added permission tests for outsider access, pending students, teacher-only assignment/invite/dashboard actions, and own-wordbook assignment scope; `pnpm run ci` passed.
 - Phase 13 done: Teacher Classes / Assignments validated and Phase 14(Paid Course Content / Entitlements) activated.
 - Blocked at T14.1: Paid products, entitlements, course access, course start, and admin course management affect billing/payment and paid access control. Need explicit product/payment provider, entitlement grant/revoke, refund/rollback, and admin authorization policy before implementation.
+- T14.1 done: added `Product` and `UserEntitlement` models with COURSE_PACK product type, DRAFT/ACTIVE/ARCHIVED product status, ACTIVE/REVOKED/EXPIRED entitlement status, and MANUAL/PURCHASE/CLASS_LICENSE entitlement source.
+- T14.2 done: added paid/free course access checks where free course packs are open and paid course packs require an ACTIVE non-expired entitlement.
+- T14.3 done: added course start flow that validates access and creates or reuses user-owned course enrollment and wordbook learning state without mutating source course content.
+- T14.4 done: no secure admin role system exists, so unsafe public admin routes were not exposed; internal product/grant/revoke service functions were added and covered by service-level tests.
+- T14.5 done: added tests for paid access denial, ACTIVE access, REVOKED/EXPIRED denial, free course start, source-content separation, revoke preservation of review_logs/review_states, and lack of public admin access; `pnpm run ci` passed.
+- Phase 14 done: Paid Course Content / Entitlements validated and Phase 15(Analytics / Recommendation Improvements) activated.
+- T15.1 done: added authenticated `/analytics/summary` review analytics with 30-day review/correct/AGAIN counts and zero-safe recall rate.
+- T15.2 done: added card quality analytics for active cards, weak cards, leech cards, low-recall cards, and average retrievability.
+- T15.3 done: added recommendation reason/score helpers and optional `recommendationReason`/`recommendationScore` fields on today cards while preserving existing queue shape.
+- T15.4 done: added content quality signals for active items, missing example sentences, tagged items, and sentence-ready items.
+- T15.5 done: added analytics and recommendation signal tests; `pnpm run ci` passed.
+- Phase 15 done: Analytics / Recommendation Improvements validated. All listed phases are complete.

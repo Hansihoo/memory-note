@@ -112,6 +112,8 @@ interface ServerTodayStudyCard {
   lapses: number;
   leechScore: number;
   retrievability?: number;
+  recommendationReason?: string | null;
+  recommendationScore?: number | null;
 }
 
 interface ServerTodayStudyResponse {
@@ -261,7 +263,9 @@ function mapTodayStudyCard(card: ServerTodayStudyCard): TodayStudyCard {
     dueAt: card.dueAt,
     lapses: card.lapses,
     leechScore: card.leechScore,
-    retrievability: card.retrievability
+    retrievability: card.retrievability,
+    recommendationReason: card.recommendationReason ?? null,
+    recommendationScore: card.recommendationScore ?? null
   };
 }
 

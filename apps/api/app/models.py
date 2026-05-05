@@ -31,6 +31,8 @@ class User(Base):
     study_group_memberships = relationship("StudyGroupMember", back_populates="user", cascade="all, delete-orphan")
     taught_classes = relationship("TeacherClass", back_populates="teacher", cascade="all, delete-orphan")
     class_memberships = relationship("ClassMember", back_populates="user", cascade="all, delete-orphan")
+    entitlements = relationship("UserEntitlement", back_populates="user", cascade="all, delete-orphan")
+    course_enrollments = relationship("CourseEnrollment", back_populates="user", cascade="all, delete-orphan")
     sync_events = relationship("SyncEvent", back_populates="user", cascade="all, delete-orphan")
 
 
@@ -216,11 +218,71 @@ class CoursePack(Base):
     title = Column(String(240), nullable=False)
     description = Column(Text, nullable=True)
     source = Column(String(80), default="manual", nullable=False)
+    access_type = Column(String(24), default="FREE", nullable=False, index=True)
     metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     units = relationship("CourseUnit", back_populates="course_pack", cascade="all, delete-orphan")
+    products = relationship("Product", back_populates="course_pack")
+    entitlements = relationship("UserEntitlement", back_populates="course_pack")
+    enrollments = relationship("CourseEnrollment", back_populates="course_pack")
+
+
+class Product(Base):
+    __tablename__ = "products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_type = Column(String(40), nullable=False, index=True)
+    status = Column(String(24), default="DRAFT", nullable=False, index=True)
+    course_pack_id = Column(Integer, ForeignKey("course_packs.id", ondelete="SET NULL"), nullable=True, index=True)
+    name = Column(String(240), nullable=False)
+    description = Column(Text, nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    course_pack = relationship("CoursePack", back_populates="products")
+    entitlements = relationship("UserEntitlement", back_populates="product")
+
+
+class UserEntitlement(Base):
+    __tablename__ = "user_entitlements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True, index=True)
+    course_pack_id = Column(Integer, ForeignKey("course_packs.id", ondelete="CASCADE"), nullable=True, index=True)
+    status = Column(String(24), default="ACTIVE", nullable=False, index=True)
+    source = Column(String(40), default="MANUAL", nullable=False, index=True)
+    starts_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    user = relationship("User", back_populates="entitlements")
+    product = relationship("Product", back_populates="entitlements")
+    course_pack = relationship("CoursePack", back_populates="entitlements")
+
+
+class CourseEnrollment(Base):
+    __tablename__ = "course_enrollments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    course_pack_id = Column(Integer, ForeignKey("course_packs.id", ondelete="RESTRICT"), nullable=False, index=True)
+    wordbook_id = Column(Integer, ForeignKey("wordbooks.id", ondelete="RESTRICT"), nullable=False, index=True)
+    status = Column(String(24), default="ACTIVE", nullable=False, index=True)
+    started_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    user = relationship("User", back_populates="course_enrollments")
+    course_pack = relationship("CoursePack", back_populates="enrollments")
+    wordbook = relationship("Wordbook")
+
+    __table_args__ = (UniqueConstraint("user_id", "course_pack_id", name="uq_course_enrollment_user_pack"),)
 
 
 class CourseUnit(Base):

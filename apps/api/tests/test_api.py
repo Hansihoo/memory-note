@@ -420,6 +420,123 @@ def test_course_pack_content_tables_are_separate_from_review_state(client, auth_
         db.close()
 
 
+def test_paid_course_entitlement_access_start_and_revoke(client, auth_headers):
+    from app.database import SessionLocal
+    from app.main import create_course_product, grant_course_entitlement, revoke_course_entitlement
+    from app.models import Card, CourseLesson, CourseLessonItem, CoursePack, CourseUnit, MemoryItem, ReviewLog, ReviewState, User, UserEntitlement
+    from app.security import utcnow
+
+    no_entitlement_headers = auth_headers
+    active_token = client.post("/auth/register", json={"username": "active-course", "password": "password123"}).json()["token"]
+    active_headers = {"Authorization": f"Bearer {active_token}"}
+    revoked_token = client.post("/auth/register", json={"username": "revoked-course", "password": "password123"}).json()["token"]
+    revoked_headers = {"Authorization": f"Bearer {revoked_token}"}
+    expired_token = client.post("/auth/register", json={"username": "expired-course", "password": "password123"}).json()["token"]
+    expired_headers = {"Authorization": f"Bearer {expired_token}"}
+
+    db = SessionLocal()
+    try:
+        active_user = db.query(User).filter(User.username == "active-course").one()
+        revoked_user = db.query(User).filter(User.username == "revoked-course").one()
+        expired_user = db.query(User).filter(User.username == "expired-course").one()
+
+        paid_pack = CoursePack(slug="paid-a1", title="Paid A1", description="Paid course", access_type="PAID")
+        paid_unit = CourseUnit(course_pack=paid_pack, position=1, title="Paid Unit")
+        paid_lesson = CourseLesson(unit=paid_unit, position=1, title="Paid Lesson")
+        paid_item = CourseLessonItem(lesson=paid_lesson, position=1, key="premium", value="paid answer", item_type="WORD")
+        free_pack = CoursePack(slug="free-a1", title="Free A1", description="Free course")
+        free_unit = CourseUnit(course_pack=free_pack, position=1, title="Free Unit")
+        free_lesson = CourseLesson(unit=free_unit, position=1, title="Free Lesson")
+        free_item = CourseLessonItem(lesson=free_lesson, position=1, key="sample", value="free answer", item_type="WORD")
+        db.add_all([paid_pack, paid_unit, paid_lesson, paid_item, free_pack, free_unit, free_lesson, free_item])
+        db.flush()
+        product = create_course_product(db, paid_pack)
+        active_entitlement = grant_course_entitlement(db, active_user, paid_pack, product=product)
+        revoked_entitlement = grant_course_entitlement(db, revoked_user, paid_pack, product=product)
+        revoke_course_entitlement(db, revoked_entitlement)
+        grant_course_entitlement(
+            db,
+            expired_user,
+            paid_pack,
+            status_value="EXPIRED",
+            product=product,
+            expires_at=utcnow() - timedelta(days=1),
+        )
+        db.commit()
+        paid_pack_id = paid_pack.id
+        free_pack_id = free_pack.id
+        active_entitlement_id = active_entitlement.id
+    finally:
+        db.close()
+
+    no_access = client.get(f"/course-packs/{paid_pack_id}/access", headers=no_entitlement_headers)
+    assert no_access.status_code == 200
+    assert no_access.json()["hasAccess"] is False
+    assert client.post(f"/course-packs/{paid_pack_id}/start", headers=no_entitlement_headers).status_code == 403
+
+    revoked_access = client.get(f"/course-packs/{paid_pack_id}/access", headers=revoked_headers)
+    assert revoked_access.status_code == 200
+    assert revoked_access.json()["hasAccess"] is False
+    assert revoked_access.json()["entitlementStatus"] == "REVOKED"
+    assert client.post(f"/course-packs/{paid_pack_id}/start", headers=revoked_headers).status_code == 403
+
+    expired_access = client.get(f"/course-packs/{paid_pack_id}/access", headers=expired_headers)
+    assert expired_access.status_code == 200
+    assert expired_access.json()["hasAccess"] is False
+    assert expired_access.json()["entitlementStatus"] == "EXPIRED"
+    assert client.post(f"/course-packs/{paid_pack_id}/start", headers=expired_headers).status_code == 403
+
+    free_start = client.post(f"/course-packs/{free_pack_id}/start", headers=no_entitlement_headers)
+    assert free_start.status_code == 201
+    assert free_start.json()["created"] is True
+    assert free_start.json()["wordCount"] == 1
+
+    active_access = client.get(f"/course-packs/{paid_pack_id}/access", headers=active_headers)
+    assert active_access.status_code == 200
+    assert active_access.json()["hasAccess"] is True
+    paid_start = client.post(f"/course-packs/{paid_pack_id}/start", headers=active_headers)
+    assert paid_start.status_code == 201
+    paid_body = paid_start.json()
+    assert paid_body["created"] is True
+    assert paid_body["wordCount"] == 1
+    repeat_start = client.post(f"/course-packs/{paid_pack_id}/start", headers=active_headers)
+    assert repeat_start.status_code == 201
+    assert repeat_start.json()["created"] is False
+    assert repeat_start.json()["wordbookId"] == paid_body["wordbookId"]
+
+    db = SessionLocal()
+    try:
+        assert db.query(CourseLessonItem).filter(CourseLessonItem.key == "premium").one().value == "paid answer"
+        assert "user_id" not in CourseLessonItem.__table__.columns
+        assert db.query(MemoryItem).filter(MemoryItem.wordbook_id == paid_body["wordbookId"]).count() == 1
+        assert db.query(ReviewState).join(Card, Card.id == ReviewState.card_id).filter(Card.wordbook_id == paid_body["wordbookId"]).count() > 0
+    finally:
+        db.close()
+
+    cards = client.get(f"/study/today?wordbookId={paid_body['wordbookId']}&limit=10", headers=active_headers).json()["cards"]
+    client.post(
+        f"/study/cards/{cards[0]['cardId']}/review",
+        json={"rating": "GOOD", "clientEventId": "paid-course-review"},
+        headers=active_headers,
+    )
+
+    db = SessionLocal()
+    try:
+        review_count = db.query(ReviewLog).count()
+        state_count = db.query(ReviewState).count()
+        entitlement = db.query(UserEntitlement).filter(UserEntitlement.id == active_entitlement_id).one()
+        revoke_course_entitlement(db, entitlement)
+        db.commit()
+        assert db.query(ReviewLog).count() == review_count
+        assert db.query(ReviewState).count() == state_count
+    finally:
+        db.close()
+
+    assert client.get(f"/course-packs/{paid_pack_id}/access", headers=active_headers).json()["hasAccess"] is False
+    assert client.post(f"/course-packs/{paid_pack_id}/start", headers=active_headers).status_code == 403
+    assert client.post("/admin/products", json={}, headers=active_headers).status_code == 404
+
+
 def test_study_today_returns_summary_filters_wordbook_and_spreads_related_cards(client, auth_headers):
     wordbook_one = client.post("/wordbooks", json={"name": "Travel"}, headers=auth_headers).json()
     wordbook_two = client.post("/wordbooks", json={"name": "Commands"}, headers=auth_headers).json()
@@ -439,6 +556,64 @@ def test_study_today_returns_summary_filters_wordbook_and_spreads_related_cards(
     assert {card["wordbookId"] for card in filtered["cards"]} == {wordbook_one["id"]}
     memory_item_ids = [card["memoryItemId"] for card in filtered["cards"]]
     assert all(left != right for left, right in zip(memory_item_ids, memory_item_ids[1:]))
+
+
+def test_analytics_summary_and_recommendation_signals(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import ReviewState
+
+    wordbook = client.post("/wordbooks", json={"name": "Analytics"}, headers=auth_headers).json()
+    client.post(f"/wordbooks/{wordbook['id']}/words", json={"key": "bad", "value": "needs work"}, headers=auth_headers)
+    client.post(
+        f"/wordbooks/{wordbook['id']}/words",
+        json={"key": "ready", "value": "prepared", "exampleSentence": "ready to go", "tags": ["quality"]},
+        headers=auth_headers,
+    )
+    today = client.get(f"/study/today?wordbookId={wordbook['id']}&limit=10", headers=auth_headers).json()
+    assert all("recommendationReason" in card and "recommendationScore" in card for card in today["cards"])
+    bad_card = next(card for card in today["cards"] if card["prompt"] == "bad")
+    ready_card = next(card for card in today["cards"] if card["prompt"] == "ready")
+
+    client.post(
+        f"/study/cards/{bad_card['cardId']}/review",
+        json={"rating": "AGAIN", "clientEventId": "analytics-bad-1"},
+        headers=auth_headers,
+    )
+    client.post(
+        f"/study/cards/{bad_card['cardId']}/review",
+        json={"rating": "AGAIN", "clientEventId": "analytics-bad-2"},
+        headers=auth_headers,
+    )
+    client.post(
+        f"/study/cards/{ready_card['cardId']}/review",
+        json={"rating": "GOOD", "clientEventId": "analytics-ready-1"},
+        headers=auth_headers,
+    )
+
+    db = SessionLocal()
+    try:
+        state = db.query(ReviewState).filter(ReviewState.card_id == bad_card["cardId"]).one()
+        state.lapses = 2
+        state.leech_score = 3
+        db.commit()
+    finally:
+        db.close()
+
+    analytics = client.get(f"/analytics/summary?wordbookId={wordbook['id']}", headers=auth_headers)
+    assert analytics.status_code == 200
+    body = analytics.json()
+    assert body["review"]["reviewCount"] == 3
+    assert body["review"]["correctCount"] == 1
+    assert body["review"]["againCount"] == 2
+    assert body["review"]["recallRate"] == 1 / 3
+    assert body["cardQuality"]["activeCardCount"] >= 4
+    assert body["cardQuality"]["weakCardCount"] >= 1
+    assert body["cardQuality"]["leechCardCount"] >= 1
+    assert body["cardQuality"]["lowRecallCardCount"] >= 1
+    assert body["contentQuality"]["activeItemCount"] == 2
+    assert body["contentQuality"]["missingExampleSentenceCount"] == 1
+    assert body["contentQuality"]["taggedItemCount"] == 1
+    assert body["contentQuality"]["sentenceReadyItemCount"] == 1
 
 
 def test_card_review_idempotency_mistakes_and_conservative_mastered(client, auth_headers):

@@ -95,6 +95,8 @@ export interface TodayStudyCard {
   lapses: number;
   leechScore: number;
   retrievability?: number;
+  recommendationReason?: string | null;
+  recommendationScore?: number | null;
 }
 
 export interface TodayStudyResponse {

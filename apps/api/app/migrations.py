@@ -321,10 +321,13 @@ def run_compat_migrations(engine: Engine) -> None:
     _add_column(engine, "cards", "hint", "hint TEXT")
     _add_column(engine, "cards", "explanation", "explanation TEXT")
     _add_column(engine, "cards", "metadata_json", "metadata_json JSON")
+    _add_column(engine, "course_packs", "access_type", "access_type VARCHAR(24) DEFAULT 'FREE'")
 
     _exec(engine, "UPDATE users SET auth_provider = 'password' WHERE auth_provider IS NULL")
     _exec(engine, "UPDATE users SET fun_events_enabled = TRUE WHERE fun_events_enabled IS NULL")
     _exec(engine, "UPDATE users SET sync_revision = 0 WHERE sync_revision IS NULL")
+    if _has_table(engine, "course_packs"):
+        _exec(engine, "UPDATE course_packs SET access_type = 'FREE' WHERE access_type IS NULL")
     _exec(engine, "UPDATE wordbooks SET sync_revision = 1 WHERE sync_revision IS NULL OR sync_revision = 0")
     _exec(engine, "UPDATE words SET sync_revision = 1 WHERE sync_revision IS NULL OR sync_revision = 0")
     _exec(

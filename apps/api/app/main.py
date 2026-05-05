@@ -20,8 +20,14 @@ from .models import (
     Card,
     ClassAssignment,
     ClassMember,
+    CourseEnrollment,
+    CourseLesson,
+    CourseLessonItem,
+    CoursePack,
+    CourseUnit,
     LearningEvent,
     MemoryItem,
+    Product,
     ReviewLog,
     ReviewState,
     StudyGroup,
@@ -29,6 +35,7 @@ from .models import (
     StudyGroupWordbook,
     SyncEvent,
     TeacherClass,
+    UserEntitlement,
     User,
     Word,
     Wordbook,
@@ -51,6 +58,8 @@ from .review import (
     ensure_memory_item_for_word,
     find_card_for_word,
     order_today_rows,
+    recommendation_reason,
+    recommendation_score,
     review_card,
     sample_mastered_check_rows,
     spread_same_item_cards,
@@ -59,6 +68,7 @@ from .review import (
 )
 from .schemas import (
     AuthRequest,
+    AnalyticsSummary,
     ClassAssignmentCreate,
     ClassAssignmentProgress,
     ClassAssignmentResponse,
@@ -67,6 +77,10 @@ from .schemas import (
     ClassMemberResponse,
     ClassMembershipUpdate,
     ClassResponse,
+    CardQualityAnalytics,
+    ContentQualityAnalytics,
+    CourseAccessResponse,
+    CourseStartResponse,
     CardReviewRequest,
     CardReviewResponse,
     CardStatus,
@@ -75,6 +89,7 @@ from .schemas import (
     MemorizedWordSummary,
     MessageResponse,
     ProfileSummary,
+    ReviewAnalytics,
     ReviewRating,
     StudyGroupCreate,
     StudyGroupInviteRequest,
@@ -122,6 +137,18 @@ GROUP_STATUS_PENDING = "PENDING"
 GROUP_STATUS_DECLINED = "DECLINED"
 CLASS_ROLE_TEACHER = "TEACHER"
 CLASS_ROLE_STUDENT = "STUDENT"
+COURSE_ACCESS_FREE = "FREE"
+COURSE_ACCESS_PAID = "PAID"
+PRODUCT_TYPE_COURSE_PACK = "COURSE_PACK"
+PRODUCT_STATUS_DRAFT = "DRAFT"
+PRODUCT_STATUS_ACTIVE = "ACTIVE"
+PRODUCT_STATUS_ARCHIVED = "ARCHIVED"
+ENTITLEMENT_STATUS_ACTIVE = "ACTIVE"
+ENTITLEMENT_STATUS_REVOKED = "REVOKED"
+ENTITLEMENT_STATUS_EXPIRED = "EXPIRED"
+ENTITLEMENT_SOURCE_MANUAL = "MANUAL"
+ENTITLEMENT_SOURCE_PURCHASE = "PURCHASE"
+ENTITLEMENT_SOURCE_CLASS_LICENSE = "CLASS_LICENSE"
 
 
 def create_app() -> FastAPI:
@@ -239,6 +266,8 @@ def today_card_response(card: Card, item: MemoryItem, state: ReviewState) -> Tod
         lapses=state.lapses or 0,
         leech_score=state.leech_score or 0,
         retrievability=calculate_retrievability(state),
+        recommendation_reason=recommendation_reason(state),
+        recommendation_score=recommendation_score(state),
     )
 
 
@@ -566,6 +595,315 @@ def teacher_class_dashboard_response(
     )
 
 
+def get_course_pack_or_404(db: Session, course_pack_id: int) -> CoursePack:
+    pack = db.query(CoursePack).filter(CoursePack.id == course_pack_id).first()
+    if pack is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Course pack not found")
+    return pack
+
+
+def course_product_ids(db: Session, course_pack_id: int) -> List[int]:
+    rows = (
+        db.query(Product.id)
+        .filter(
+            Product.product_type == PRODUCT_TYPE_COURSE_PACK,
+            Product.course_pack_id == course_pack_id,
+            Product.status == PRODUCT_STATUS_ACTIVE,
+        )
+        .all()
+    )
+    return [int(row[0]) for row in rows]
+
+
+def is_paid_course_pack(db: Session, pack: CoursePack) -> bool:
+    if pack.access_type == COURSE_ACCESS_PAID:
+        return True
+    return bool(course_product_ids(db, pack.id))
+
+
+def active_course_entitlement(
+    db: Session,
+    user: User,
+    pack: CoursePack,
+    now: Optional[datetime] = None,
+) -> Optional[UserEntitlement]:
+    now = now or utcnow()
+    product_ids = course_product_ids(db, pack.id)
+    scope_filters = [UserEntitlement.course_pack_id == pack.id]
+    if product_ids:
+        scope_filters.append(UserEntitlement.product_id.in_(product_ids))
+    return (
+        db.query(UserEntitlement)
+        .filter(
+            UserEntitlement.user_id == user.id,
+            UserEntitlement.status == ENTITLEMENT_STATUS_ACTIVE,
+            UserEntitlement.revoked_at.is_(None),
+            or_(UserEntitlement.starts_at.is_(None), UserEntitlement.starts_at <= now),
+            or_(UserEntitlement.expires_at.is_(None), UserEntitlement.expires_at > now),
+            or_(*scope_filters),
+        )
+        .order_by(UserEntitlement.updated_at.desc())
+        .first()
+    )
+
+
+def latest_course_entitlement_status(db: Session, user: User, pack: CoursePack) -> Optional[str]:
+    product_ids = course_product_ids(db, pack.id)
+    scope_filters = [UserEntitlement.course_pack_id == pack.id]
+    if product_ids:
+        scope_filters.append(UserEntitlement.product_id.in_(product_ids))
+    row = (
+        db.query(UserEntitlement)
+        .filter(UserEntitlement.user_id == user.id, or_(*scope_filters))
+        .order_by(UserEntitlement.updated_at.desc())
+        .first()
+    )
+    return row.status if row is not None else None
+
+
+def course_access_response(db: Session, user: User, pack: CoursePack) -> CourseAccessResponse:
+    paid = is_paid_course_pack(db, pack)
+    entitlement = active_course_entitlement(db, user, pack)
+    access_type = COURSE_ACCESS_PAID if paid else COURSE_ACCESS_FREE
+    return CourseAccessResponse(
+        course_pack_id=pack.id,
+        access_type=access_type,
+        has_access=(not paid) or entitlement is not None,
+        entitlement_status=entitlement.status if entitlement is not None else latest_course_entitlement_status(db, user, pack),
+    )
+
+
+def require_course_access(db: Session, user: User, pack: CoursePack) -> None:
+    access = course_access_response(db, user, pack)
+    if not access.has_access:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Course entitlement required")
+
+
+def create_course_product(
+    db: Session,
+    pack: CoursePack,
+    name: Optional[str] = None,
+    status_value: str = PRODUCT_STATUS_ACTIVE,
+) -> Product:
+    product = Product(
+        product_type=PRODUCT_TYPE_COURSE_PACK,
+        status=status_value,
+        course_pack_id=pack.id,
+        name=name or pack.title,
+    )
+    db.add(product)
+    db.flush()
+    return product
+
+
+def grant_course_entitlement(
+    db: Session,
+    user: User,
+    pack: CoursePack,
+    source: str = ENTITLEMENT_SOURCE_MANUAL,
+    status_value: str = ENTITLEMENT_STATUS_ACTIVE,
+    product: Optional[Product] = None,
+    expires_at: Optional[datetime] = None,
+) -> UserEntitlement:
+    entitlement = UserEntitlement(
+        user_id=user.id,
+        product_id=product.id if product is not None else None,
+        course_pack_id=pack.id,
+        status=status_value,
+        source=source,
+        expires_at=expires_at,
+    )
+    db.add(entitlement)
+    db.flush()
+    return entitlement
+
+
+def revoke_course_entitlement(db: Session, entitlement: UserEntitlement, revoked_at: Optional[datetime] = None) -> UserEntitlement:
+    entitlement.status = ENTITLEMENT_STATUS_REVOKED
+    entitlement.revoked_at = revoked_at or utcnow()
+    entitlement.updated_at = entitlement.revoked_at
+    db.flush()
+    return entitlement
+
+
+def unique_course_wordbook_name(db: Session, user: User, pack: CoursePack) -> str:
+    base_name = f"{pack.title} Course"
+    candidate = base_name[:160]
+    suffix = 2
+    while (
+        db.query(Wordbook)
+        .filter(Wordbook.user_id == user.id, Wordbook.name == candidate, Wordbook.deleted_at.is_(None))
+        .first()
+        is not None
+    ):
+        suffix_text = f" {suffix}"
+        candidate = f"{base_name[: 160 - len(suffix_text)]}{suffix_text}"
+        suffix += 1
+    return candidate
+
+
+def course_lesson_items(db: Session, pack: CoursePack) -> List[CourseLessonItem]:
+    return (
+        db.query(CourseLessonItem)
+        .join(CourseLesson, CourseLessonItem.course_lesson_id == CourseLesson.id)
+        .join(CourseUnit, CourseLesson.course_unit_id == CourseUnit.id)
+        .filter(CourseUnit.course_pack_id == pack.id)
+        .order_by(CourseUnit.position.asc(), CourseLesson.position.asc(), CourseLessonItem.position.asc())
+        .all()
+    )
+
+
+def start_course_for_user(db: Session, user: User, pack: CoursePack) -> CourseStartResponse:
+    require_course_access(db, user, pack)
+    existing = (
+        db.query(CourseEnrollment)
+        .filter(CourseEnrollment.user_id == user.id, CourseEnrollment.course_pack_id == pack.id)
+        .first()
+    )
+    if existing is not None:
+        word_count = db.query(func.count(Word.id)).filter(Word.wordbook_id == existing.wordbook_id, Word.deleted_at.is_(None)).scalar() or 0
+        return CourseStartResponse(
+            course_pack_id=pack.id,
+            enrollment_id=existing.id,
+            wordbook_id=existing.wordbook_id,
+            created=False,
+            word_count=word_count,
+        )
+
+    wordbook = Wordbook(user_id=user.id, name=unique_course_wordbook_name(db, user, pack), description=pack.description)
+    db.add(wordbook)
+    db.flush()
+    mark_wordbook_changed(db, user, wordbook, "create")
+
+    created_words = 0
+    for item in course_lesson_items(db, pack):
+        word = Word(wordbook_id=wordbook.id, key=item.key, value=item.value)
+        db.add(word)
+        db.flush()
+        ensure_memory_item_for_word(
+            db,
+            user,
+            word,
+            item.item_type,
+            example_sentence=item.example_sentence,
+            update_example_sentence=True,
+            tags=normalize_tags(item.tags),
+            update_tags=True,
+            cloze_text=item.cloze_text,
+            update_cloze_text=True,
+        )
+        mark_word_changed(db, user, word, "create")
+        created_words += 1
+
+    enrollment = CourseEnrollment(user_id=user.id, course_pack_id=pack.id, wordbook_id=wordbook.id)
+    db.add(enrollment)
+    db.flush()
+    return CourseStartResponse(
+        course_pack_id=pack.id,
+        enrollment_id=enrollment.id,
+        wordbook_id=wordbook.id,
+        created=True,
+        word_count=created_words,
+    )
+
+
+def review_analytics_response(
+    db: Session,
+    user: User,
+    wordbook_id: Optional[int] = None,
+    window_days: int = 30,
+    now: Optional[datetime] = None,
+) -> ReviewAnalytics:
+    now = now or utcnow()
+    cutoff = now - timedelta(days=window_days)
+    query = db.query(ReviewLog).filter(ReviewLog.user_id == user.id, ReviewLog.reviewed_at >= cutoff)
+    if wordbook_id is not None:
+        query = query.filter(ReviewLog.deck_id == wordbook_id)
+    review_count = query.count()
+    correct_count = query.filter(ReviewLog.rating.in_([RATING_HARD, RATING_GOOD, RATING_EASY])).count()
+    again_count = query.filter(ReviewLog.rating == RATING_AGAIN).count()
+    return ReviewAnalytics(
+        window_days=window_days,
+        review_count=review_count,
+        correct_count=correct_count,
+        again_count=again_count,
+        recall_rate=correct_count / review_count if review_count else 0,
+    )
+
+
+def card_quality_analytics_response(
+    db: Session,
+    user: User,
+    wordbook_id: Optional[int] = None,
+    window_days: int = 30,
+    now: Optional[datetime] = None,
+) -> CardQualityAnalytics:
+    now = now or utcnow()
+    rows_query = today_cards_query(db, user, wordbook_id)
+    rows = rows_query.all()
+    active_card_ids = {row[0].id for row in rows}
+    weak_count = len([row for row in rows if (row[2].leech_score or 0) >= 3 or (row[2].lapses or 0) >= 2])
+    leech_count = len([row for row in rows if (row[2].leech_score or 0) >= 3])
+    avg_retrievability = sum(calculate_retrievability(row[2], now) for row in rows) / len(rows) if rows else 0
+
+    cutoff = now - timedelta(days=window_days)
+    review_query = db.query(ReviewLog).filter(ReviewLog.user_id == user.id, ReviewLog.reviewed_at >= cutoff)
+    if wordbook_id is not None:
+        review_query = review_query.filter(ReviewLog.deck_id == wordbook_id)
+    by_card: Dict[int, Dict[str, int]] = {}
+    for log in review_query.all():
+        if log.card_id not in active_card_ids:
+            continue
+        bucket = by_card.setdefault(log.card_id, {"total": 0, "correct": 0})
+        bucket["total"] += 1
+        if log.rating in {RATING_HARD, RATING_GOOD, RATING_EASY}:
+            bucket["correct"] += 1
+    low_recall_count = len(
+        [
+            card_id
+            for card_id, bucket in by_card.items()
+            if card_id in active_card_ids and bucket["total"] >= 2 and bucket["correct"] / bucket["total"] < 0.6
+        ]
+    )
+    return CardQualityAnalytics(
+        active_card_count=len(rows),
+        weak_card_count=weak_count,
+        leech_card_count=leech_count,
+        low_recall_card_count=low_recall_count,
+        average_retrievability=avg_retrievability,
+    )
+
+
+def content_quality_analytics_response(db: Session, user: User, wordbook_id: Optional[int] = None) -> ContentQualityAnalytics:
+    query = (
+        db.query(MemoryItem)
+        .join(Wordbook, Wordbook.id == MemoryItem.wordbook_id)
+        .filter(MemoryItem.user_id == user.id, MemoryItem.deleted_at.is_(None), Wordbook.deleted_at.is_(None))
+    )
+    if wordbook_id is not None:
+        query = query.filter(MemoryItem.wordbook_id == wordbook_id)
+    items = query.all()
+    missing_examples = len(
+        [item for item in items if item.item_type == "WORD" and not (item.example_sentence or "").strip()]
+    )
+    tagged_count = len([item for item in items if item.tags])
+    sentence_ready_count = len([item for item in items if (item.example_sentence or "").strip() or (item.cloze_text or "").strip()])
+    return ContentQualityAnalytics(
+        active_item_count=len(items),
+        missing_example_sentence_count=missing_examples,
+        tagged_item_count=tagged_count,
+        sentence_ready_item_count=sentence_ready_count,
+    )
+
+
+def analytics_summary_response(db: Session, user: User, wordbook_id: Optional[int] = None) -> AnalyticsSummary:
+    return AnalyticsSummary(
+        review=review_analytics_response(db, user, wordbook_id),
+        card_quality=card_quality_analytics_response(db, user, wordbook_id),
+        content_quality=content_quality_analytics_response(db, user, wordbook_id),
+    )
+
+
 def sync_legacy_word_after_review(db: Session, user: User, card: Card, rating: str, reviewed_at: datetime, create_learning_event: bool) -> Optional[Word]:
     item = card.memory_item
     if item is None or item.legacy_word_id is None:
@@ -872,6 +1210,42 @@ def register_routes(api: FastAPI) -> None:
         db.commit()
         db.refresh(current_user)
         return UserSettingsResponse(fun_events_enabled=current_user.fun_events_enabled)
+
+    @api.get("/course-packs/{course_pack_id}/access", response_model=CourseAccessResponse)
+    def course_pack_access(
+        course_pack_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> CourseAccessResponse:
+        pack = get_course_pack_or_404(db, course_pack_id)
+        return course_access_response(db, current_user, pack)
+
+    @api.post("/course-packs/{course_pack_id}/start", response_model=CourseStartResponse, status_code=status.HTTP_201_CREATED)
+    def start_course_pack(
+        course_pack_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> CourseStartResponse:
+        pack = get_course_pack_or_404(db, course_pack_id)
+        try:
+            response = start_course_for_user(db, current_user, pack)
+            db.commit()
+            return response
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Course could not be started")
+
+    @api.get("/analytics/summary", response_model=AnalyticsSummary)
+    def analytics_summary(
+        wordbookId: Optional[int] = None,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> AnalyticsSummary:
+        if wordbookId is not None:
+            get_user_wordbook(db, current_user, wordbookId)
+        backfill_review_models(db, current_user)
+        db.flush()
+        return analytics_summary_response(db, current_user, wordbookId)
 
     @api.get("/wordbooks", response_model=List[WordbookResponse])
     def list_wordbooks(

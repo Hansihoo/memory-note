@@ -225,6 +225,50 @@ class TeacherClassDashboardResponse(ApiModel):
     assignments: List[ClassAssignmentProgress]
 
 
+class ReviewAnalytics(ApiModel):
+    window_days: int = Field(alias="windowDays")
+    review_count: int = Field(alias="reviewCount")
+    correct_count: int = Field(alias="correctCount")
+    again_count: int = Field(alias="againCount")
+    recall_rate: float = Field(alias="recallRate")
+
+
+class CardQualityAnalytics(ApiModel):
+    active_card_count: int = Field(alias="activeCardCount")
+    weak_card_count: int = Field(alias="weakCardCount")
+    leech_card_count: int = Field(alias="leechCardCount")
+    low_recall_card_count: int = Field(alias="lowRecallCardCount")
+    average_retrievability: float = Field(alias="averageRetrievability")
+
+
+class ContentQualityAnalytics(ApiModel):
+    active_item_count: int = Field(alias="activeItemCount")
+    missing_example_sentence_count: int = Field(alias="missingExampleSentenceCount")
+    tagged_item_count: int = Field(alias="taggedItemCount")
+    sentence_ready_item_count: int = Field(alias="sentenceReadyItemCount")
+
+
+class AnalyticsSummary(ApiModel):
+    review: ReviewAnalytics
+    card_quality: CardQualityAnalytics = Field(alias="cardQuality")
+    content_quality: ContentQualityAnalytics = Field(alias="contentQuality")
+
+
+class CourseAccessResponse(ApiModel):
+    course_pack_id: int = Field(alias="coursePackId")
+    access_type: str = Field(alias="accessType")
+    has_access: bool = Field(alias="hasAccess")
+    entitlement_status: Optional[str] = Field(None, alias="entitlementStatus")
+
+
+class CourseStartResponse(ApiModel):
+    course_pack_id: int = Field(alias="coursePackId")
+    enrollment_id: int = Field(alias="enrollmentId")
+    wordbook_id: int = Field(alias="wordbookId")
+    created: bool
+    word_count: int = Field(alias="wordCount")
+
+
 class WordCreate(BaseModel):
     key: constr(strip_whitespace=True, min_length=1)
     value: constr(strip_whitespace=True, min_length=1)
@@ -315,6 +359,8 @@ class TodayStudyCard(ApiModel):
     lapses: int
     leech_score: int = Field(alias="leechScore")
     retrievability: float
+    recommendation_reason: Optional[str] = Field(None, alias="recommendationReason")
+    recommendation_score: Optional[float] = Field(None, alias="recommendationScore")
 
 
 class TodayStudyResponse(ApiModel):
