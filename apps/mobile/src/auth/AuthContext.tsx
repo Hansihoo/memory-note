@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { createMobileApiClient, MobileApiError, type MobileApiClient, type UserProfile } from "../api/client";
+import { flushPendingReviews } from "../pending/pendingReviewQueue";
 import { clearAuthToken, loadAuthToken, saveAuthToken } from "./tokenStorage";
 
 type AuthStatus = "loading" | "signedOut" | "signedIn";
@@ -80,6 +81,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [api, applyToken]);
+
+  useEffect(() => {
+    if (status === "signedIn") {
+      void flushPendingReviews(api);
+    }
+  }, [api, status]);
 
   const login = useCallback(
     async (username: string, password: string) => {

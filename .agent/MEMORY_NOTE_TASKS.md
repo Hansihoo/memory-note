@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase M3
-- Active phase: Phase M4 — Mobile Pending Review Queue
-- Next task: M4.1 Add AsyncStorage-backed pending review queue
+- Completed through: Phase M4
+- Active phase: Phase M5 — Mobile Mistakes and Profile
+- Next task: M5.1 Fetch GET /study/mistakes
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -292,18 +292,18 @@ Acceptance Criteria:
 - Mobile does not compute due_at locally.
 
 ## Phase M4 — Mobile Pending Review Queue
-Status: Pending
+Status: Completed
 
 Goal:
 Preserve reviews when network calls fail.
 
 TODO:
-- [ ] M4.1 Add AsyncStorage-backed pending review queue.
-- [ ] M4.2 Reuse pending review event model from packages/core.
-- [ ] M4.3 Flush pending reviews on app start and before/after study.
-- [ ] M4.4 Reuse clientEventId for retries.
-- [ ] M4.5 Apply the same status-code policy as extension.
-- [ ] M4.6 Add pending queue tests or smoke validation.
+- [x] M4.1 Add AsyncStorage-backed pending review queue.
+- [x] M4.2 Reuse pending review event model from packages/core.
+- [x] M4.3 Flush pending reviews on app start and before/after study.
+- [x] M4.4 Reuse clientEventId for retries.
+- [x] M4.5 Apply the same status-code policy as extension.
+- [x] M4.6 Add pending queue tests or smoke validation.
 
 Acceptance Criteria:
 - Failed review submissions are queued.
@@ -488,3 +488,10 @@ Acceptance Criteria:
 - M3.8 done: study screen reuses `createStudySessionFromTodayCards`, `getCurrentStudyCard`, `revealStudySession`, and `advanceStudySession` from `packages/core`; mobile does not compute `due_at`. Files changed: `apps/mobile/app/study.tsx`. Files/functions inspected: `packages/core/src/session.ts`. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M3.9.
 - M3.9 done: added API mapping and MOBILE review payload tests plus Expo export smoke validation. Files changed: `apps/mobile/src/api/client.test.ts`, `apps/mobile/src/study/reviewPayload.test.ts`. Files/functions inspected: `apps/mobile/vitest.config.ts`. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M4.1.
 - Phase M3 done: Mobile Today Study validated; Phase M4(Mobile Pending Review Queue) activated.
+- M4.1 done: added AsyncStorage-backed pending review queue storage. Files changed: `apps/mobile/src/pending/pendingReviewQueue.ts`. Files/functions inspected: `apps/extension/src/pending-review.ts`, mobile decision policy. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M4.2.
+- M4.2 done: pending queue uses `packages/core` `PendingReviewEvent` and `createPendingReviewEvent` with `StudyPlatform.MOBILE`. Files changed: `apps/mobile/src/pending/pendingReviewQueue.ts`. Files/functions inspected: `packages/core/src/session.ts::PendingReviewEvent`. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M4.3.
+- M4.3 done: pending reviews flush when auth becomes signed-in, before loading study cards, and after successful study review submission. Files changed: `apps/mobile/src/auth/AuthContext.tsx`, `apps/mobile/app/study.tsx`. Files/functions inspected: mobile auth restore flow and study submit flow. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M4.4.
+- M4.4 done: failed reviews are stored with the original review `clientEventId`, and retries reuse the same value. Files changed: `apps/mobile/app/study.tsx`, `apps/mobile/src/pending/pendingReviewQueue.ts`. Files/functions inspected: `apps/mobile/src/study/reviewPayload.ts`. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M4.5.
+- M4.5 done: mobile queue now matches extension retry policy: success removes, network/5xx keeps and increments attempt count, 401/403 preserves queue and returns `auth_required`, 404/409/422 drops, 7-day retention, 200-event cap, oldest-first 20-event flush. Files changed: `apps/mobile/src/pending/pendingReviewQueue.ts`. Files/functions inspected: `apps/extension/src/pending-review.ts`. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M4.6.
+- M4.6 done: added pending queue tests for enqueue, successful retry removal, auth preservation, non-retryable removal, network retry attempt increments, cap/prune, and max 20 flush batch; Expo export smoke validation passed. Files changed: `apps/mobile/src/pending/pendingReviewQueue.test.ts`. Files/functions inspected: extension pending tests. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M5.1.
+- Phase M4 done: Mobile Pending Review Queue validated; Phase M5(Mobile Mistakes and Profile) activated.

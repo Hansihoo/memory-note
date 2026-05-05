@@ -12,6 +12,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { useAuth } from "../src/auth/AuthContext";
+import {
+  createPendingReviewForFailedAttempt,
+  enqueuePendingReview,
+  flushPendingReviews
+} from "../src/pending/pendingReviewQueue";
 import { createMobileReviewPayload } from "../src/study/reviewPayload";
 
 export default function StudyScreen() {
@@ -33,6 +38,7 @@ export default function StudyScreen() {
     setLoading(true);
     setError(null);
     try {
+      await flushPendingReviews(auth.api);
       const response = await auth.api.studyToday(20);
       setSummary(response.summary);
       setSession(createStudySessionFromTodayCards(response.cards));
@@ -53,11 +59,26 @@ export default function StudyScreen() {
     }
     setSubmitting(true);
     setError(null);
+    const payload = createMobileReviewPayload(current.cardId, rating);
     try {
-      await auth.api.reviewCard(current.cardId, createMobileReviewPayload(current.cardId, rating));
+      await auth.api.reviewCard(current.cardId, payload);
+      await flushPendingReviews(auth.api);
       setSession((previous) => (previous ? advanceStudySession(previous) : previous));
     } catch (reviewError) {
-      setError(reviewError instanceof Error ? reviewError.message : "리뷰를 저장하지 못했습니다.");
+      const status = (reviewError as { status?: number }).status;
+      if (status === 404 || status === 409 || status === 422) {
+        setError("이 카드는 더 이상 저장할 수 없어 건너뜁니다.");
+      } else {
+        await enqueuePendingReview(
+          createPendingReviewForFailedAttempt({
+            cardId: current.cardId,
+            rating,
+            clientEventId: payload.clientEventId
+          })
+        );
+        setSession((previous) => (previous ? advanceStudySession(previous) : previous));
+        setError(status === 401 || status === 403 ? "로그인이 필요해 리뷰를 임시 저장했습니다." : "네트워크 문제로 리뷰를 임시 저장했습니다.");
+      }
     } finally {
       setSubmitting(false);
     }
