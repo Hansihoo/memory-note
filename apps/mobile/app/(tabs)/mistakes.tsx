@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { useAuth } from "../src/auth/AuthContext";
+import { useAuth } from "../../src/auth/AuthContext";
 
 export default function MistakesScreen() {
   const auth = useAuth();
@@ -80,7 +80,12 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
-    padding: 18
+    padding: 18,
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2
   },
   prompt: {
     color: "#1F2933",
@@ -112,6 +117,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 16,
     backgroundColor: "#2F7D5C",
+    minHeight: 52,
+    justifyContent: "center",
     paddingVertical: 14
   },
   primaryButtonText: {

@@ -184,7 +184,12 @@ const styles = StyleSheet.create({
     gap: 20,
     borderRadius: 26,
     backgroundColor: "#FFFFFF",
-    padding: 24
+    padding: 24,
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 4
   },
   prompt: {
     color: "#1F2933",
@@ -223,6 +228,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
     borderRadius: 18,
     backgroundColor: "#2F7D5C",
+    minHeight: 56,
+    justifyContent: "center",
     paddingVertical: 16
   },
   primaryButtonText: {
@@ -236,6 +243,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: "#B7D3C5",
+    minHeight: 56,
+    justifyContent: "center",
     paddingVertical: 16
   },
   secondaryButtonText: {
@@ -251,22 +260,28 @@ const styles = StyleSheet.create({
   againButton: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 16,
     backgroundColor: "#9F1239",
+    minHeight: 58,
     paddingVertical: 15
   },
   hardButton: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 16,
     backgroundColor: "#B45309",
+    minHeight: 58,
     paddingVertical: 15
   },
   goodButton: {
     flex: 1,
     alignItems: "center",
+    justifyContent: "center",
     borderRadius: 16,
     backgroundColor: "#2F7D5C",
+    minHeight: 58,
     paddingVertical: 15
   },
   reviewButtonText: {

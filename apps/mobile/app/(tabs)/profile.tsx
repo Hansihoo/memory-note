@@ -2,8 +2,8 @@ import { router } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { useAuth } from "../src/auth/AuthContext";
-import type { ProfileSummary } from "../src/api/client";
+import type { ProfileSummary } from "../../src/api/client";
+import { useAuth } from "../../src/auth/AuthContext";
 
 export default function ProfileScreen() {
   const auth = useAuth();
@@ -114,7 +114,12 @@ const styles = StyleSheet.create({
     width: "48%",
     borderRadius: 18,
     backgroundColor: "#FFFFFF",
-    padding: 16
+    padding: 16,
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2
   },
   metricValue: {
     color: "#1F2933",
@@ -130,7 +135,12 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 20,
     backgroundColor: "#FFFFFF",
-    padding: 18
+    padding: 18,
+    shadowColor: "#111827",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2
   },
   cardTitle: {
     color: "#1F2933",

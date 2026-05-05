@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import type { TodaySummary } from "@memory-note/core";
 
-import { useAuth } from "../src/auth/AuthContext";
+import { useAuth } from "../../src/auth/AuthContext";
 
 export default function HomeScreen() {
   const auth = useAuth();

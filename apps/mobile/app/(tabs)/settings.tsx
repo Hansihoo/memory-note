@@ -1,7 +1,7 @@
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { useAuth } from "../src/auth/AuthContext";
+import { useAuth } from "../../src/auth/AuthContext";
 
 export default function SettingsScreen() {
   const auth = useAuth();

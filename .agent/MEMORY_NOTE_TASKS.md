@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase M5
-- Active phase: Phase M6 — Mobile UX Polish
-- Next task: M6.1 Add card-based visual style
+- Completed through: Phase M6
+- Active phase: None
+- Next task: None — all listed phases and mobile phases are complete
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -336,18 +336,18 @@ Acceptance Criteria:
 - Existing API response shapes are respected.
 
 ## Phase M6 — Mobile UX Polish
-Status: Pending
+Status: Completed
 
 Goal:
 Make the mobile MVP usable and visually coherent.
 
 TODO:
-- [ ] M6.1 Add card-based visual style.
-- [ ] M6.2 Add bottom tab navigation.
-- [ ] M6.3 Improve touch targets.
-- [ ] M6.4 Add consistent colors and typography.
-- [ ] M6.5 Add empty/error state polish.
-- [ ] M6.6 Run full CI.
+- [x] M6.1 Add card-based visual style.
+- [x] M6.2 Add bottom tab navigation.
+- [x] M6.3 Improve touch targets.
+- [x] M6.4 Add consistent colors and typography.
+- [x] M6.5 Add empty/error state polish.
+- [x] M6.6 Run full CI.
 
 Acceptance Criteria:
 - Mobile UI is usable on phone-sized screens.
@@ -502,3 +502,10 @@ Acceptance Criteria:
 - M5.5 done: mistakes and profile screens include loading, retryable error, and empty states; home links to both screens. Files changed: `apps/mobile/app/mistakes.tsx`, `apps/mobile/app/profile.tsx`, `apps/mobile/app/index.tsx`. Files/functions inspected: mobile UX scope. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M5.6.
 - M5.6 done: added API tests for mistakes mapping and null-safe profile long-term stats plus Expo export smoke validation. Files changed: `apps/mobile/src/api/client.test.ts`. Files/functions inspected: `apps/mobile/vitest.config.ts`. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M6.1.
 - Phase M5 done: Mobile Mistakes and Profile validated; Phase M6(Mobile UX Polish) activated.
+- M6.1 done: improved card-based visual styling for study, mistakes, and profile surfaces with consistent white cards, soft shadows, and off-white background. Files changed: `apps/mobile/app/study.tsx`, `apps/mobile/app/(tabs)/mistakes.tsx`, `apps/mobile/app/(tabs)/profile.tsx`. Files/functions inspected: existing mobile screens and visual policy in `.agent/DECISIONS.md`. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile build` passed. Next TODO: M6.2.
+- M6.2 done: moved home, mistakes, profile, and settings into an Expo Router `(tabs)` group and added bottom tab navigation. Files changed: `apps/mobile/app/_layout.tsx`, `apps/mobile/app/(tabs)/_layout.tsx`, moved tab route files. Files/functions inspected: Expo Router layout files. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M6.3.
+- M6.3 done: increased primary/review touch target heights on study actions and kept tab navigation reachable on phone screens. Files changed: `apps/mobile/app/study.tsx`, `apps/mobile/app/(tabs)/_layout.tsx`. Files/functions inspected: study action layout. Validation: `pnpm -C apps/mobile typecheck` passed. Next TODO: M6.4.
+- M6.4 done: aligned mobile tab, card, and action colors around the established Memory Note green/off-white/main-text palette. Files changed: `apps/mobile/app/(tabs)/_layout.tsx`, `apps/mobile/app/study.tsx`, `apps/mobile/app/(tabs)/mistakes.tsx`, `apps/mobile/app/(tabs)/profile.tsx`. Files/functions inspected: extension/web color direction and mobile screens. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M6.5.
+- M6.5 done: preserved and polished loading/error/empty states across home, study, mistakes, and profile while keeping the primary study action obvious. Files changed: mobile tab screens and study screen. Files/functions inspected: all mobile route states. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M6.6.
+- M6.6 done: ran full `pnpm run ci`. First run failed because Expo generation had introduced workspace-wide `nodeLinker: hoisted`, causing duplicate React runtime instances and web hook failures; fixed by removing `nodeLinker: hoisted` from `pnpm-workspace.yaml` and reinstalling. Second run failed because mobile React 19 types leaked into web React 18 `lucide-react` type resolution; fixed by scoping web `tsconfig` React paths to the web app's local React 18 types. Final validation: `pnpm run ci` passed across lint, typecheck, unit/integration tests, and build. Files changed: `pnpm-workspace.yaml`, `apps/web/tsconfig.json`, `.agent/DECISIONS.md`. Next TODO: None.
+- Phase M6 done: Mobile UX Polish validated. All mobile phases M1-M6 are complete.
