@@ -649,7 +649,9 @@ textarea:focus {
   font-size: clamp(42px, 6.5vw, 82px);
   font-weight: 800;
   line-height: 1.06;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
 }
 
 .notebook-answer strong {

@@ -33,6 +33,7 @@ const chromeApi = (
   }
 ).chrome;
 const speechDriver = createExtensionSpeechDriver();
+const MIN_QUIZ_TEXT_FONT_SIZE = 8;
 
 style.textContent = popupStyles;
 document.head.append(style);
@@ -210,6 +211,8 @@ function renderQuiz(
         }
       });
     });
+
+  fitQuizText(container);
 }
 
 function createQuizBody(snapshot: MiniQuizSnapshot): string {
@@ -353,6 +356,29 @@ function setStatus(
 
   status.textContent = message;
   status.classList.toggle("error", isError);
+}
+
+function fitQuizText(container: ParentNode): void {
+  container
+    .querySelectorAll<HTMLElement>(".quiz-prompt, .quiz-answer.revealed")
+    .forEach((element) => {
+      element.style.fontSize = "";
+      const baseFontSize = Number.parseFloat(
+        window.getComputedStyle(element).fontSize,
+      );
+      if (!Number.isFinite(baseFontSize)) {
+        return;
+      }
+
+      let nextFontSize = Math.floor(baseFontSize);
+      while (
+        element.scrollWidth > element.clientWidth + 1 &&
+        nextFontSize > MIN_QUIZ_TEXT_FONT_SIZE
+      ) {
+        nextFontSize -= 1;
+        element.style.fontSize = `${nextFontSize}px`;
+      }
+    });
 }
 
 function escapeHtml(value: string): string {

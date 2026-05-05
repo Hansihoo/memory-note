@@ -98,8 +98,9 @@
 
 .mnq-prompt,
 .mnq-answer {
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
   letter-spacing: 0;
   line-height: 1.2;
 }

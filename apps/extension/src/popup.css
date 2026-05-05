@@ -248,8 +248,9 @@ body.start-popup {
 
 .quiz-prompt,
 .quiz-answer {
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
   color: #14211c;
   font-size: 22px;
   font-weight: 850;

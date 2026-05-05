@@ -22,9 +22,10 @@ import {
 import { createExtensionSpeechDriver } from "./speech";
 
 const ROOT_ID = "memory-note-mini-quiz-root";
-const UI_VERSION = "note-speech-layout-v3";
+const UI_VERSION = "note-speech-layout-v4";
 const AUTO_HIDE_DELAY_MS = 2400;
 const MAX_TIMER_DELAY_MS = 2_147_000_000;
+const MIN_QUIZ_TEXT_FONT_SIZE = 8;
 
 let autoHideTimer: number | undefined;
 let nextQuizTimer: number | undefined;
@@ -182,6 +183,7 @@ function renderOverlay(session: MiniQuizSession): void {
   const update = (snapshot = session.snapshot()) => {
     shell.innerHTML = createShellMarkup(snapshot);
     bindActions(shell, session, update, host);
+    fitQuizText(shell);
 
     if (snapshot.isComplete) {
       window.clearTimeout(autoHideTimer);
@@ -370,6 +372,29 @@ function getSelectedLabel(mark: QuizMark | null): string {
   }
 
   return "답 확인";
+}
+
+function fitQuizText(container: ParentNode): void {
+  container
+    .querySelectorAll<HTMLElement>(".mnq-prompt, .mnq-answer.revealed")
+    .forEach((element) => {
+      element.style.fontSize = "";
+      const baseFontSize = Number.parseFloat(
+        window.getComputedStyle(element).fontSize,
+      );
+      if (!Number.isFinite(baseFontSize)) {
+        return;
+      }
+
+      let nextFontSize = Math.floor(baseFontSize);
+      while (
+        element.scrollWidth > element.clientWidth + 1 &&
+        nextFontSize > MIN_QUIZ_TEXT_FONT_SIZE
+      ) {
+        nextFontSize -= 1;
+        element.style.fontSize = `${nextFontSize}px`;
+      }
+    });
 }
 
 function escapeHtml(value: string): string {
