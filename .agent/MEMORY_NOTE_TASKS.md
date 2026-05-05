@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase 15
-- Active phase: None
-- Next task: None — all listed phases are complete
+- Completed through: Phase M1
+- Active phase: Phase M2 — Mobile Auth
+- Next task: M2.1 Add API client with mobile API base URL config
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -221,6 +221,141 @@ TODO:
 - [x] T15.4 Add content quality signals.
 - [x] T15.5 Add tests.
 
+## Phase M1 — Mobile App Foundation
+Status: Completed
+
+Goal:
+Create apps/mobile as an Expo + React Native app that can import packages/core.
+
+TODO:
+- [x] M1.1 Create apps/mobile with Expo + React Native.
+- [x] M1.2 Configure pnpm workspace and package scripts.
+- [x] M1.3 Configure Expo Router basic routes.
+- [x] M1.4 Verify packages/core can be imported.
+- [x] M1.5 Add basic mobile lint/type/test checks if practical.
+- [x] M1.6 Add a minimal home screen.
+
+Acceptance Criteria:
+- apps/mobile exists.
+- Expo app can start.
+- Expo Router is configured.
+- packages/core imports work.
+- A minimal screen renders.
+- Mobile scripts are available through pnpm workspace.
+
+## Phase M2 — Mobile Auth
+Status: Pending
+
+Goal:
+Allow users to log in, register, restore auth state, and log out.
+
+TODO:
+- [ ] M2.1 Add API client with mobile API base URL config.
+- [ ] M2.2 Add login screen.
+- [ ] M2.3 Add register screen.
+- [ ] M2.4 Store auth token in expo-secure-store.
+- [ ] M2.5 Restore auth state on app start.
+- [ ] M2.6 Add logout.
+- [ ] M2.7 Add auth tests or smoke validation where practical.
+
+Acceptance Criteria:
+- User can log in.
+- User can register.
+- Auth token is stored in expo-secure-store, not AsyncStorage.
+- App restores auth state after restart.
+- User can log out.
+- /me works when authenticated.
+
+## Phase M3 — Mobile Today Study
+Status: Pending
+
+Goal:
+Let mobile users fetch today cards and submit reviews.
+
+TODO:
+- [ ] M3.1 Fetch GET /study/today.
+- [ ] M3.2 Render today summary.
+- [ ] M3.3 Render study card prompt and hidden answer.
+- [ ] M3.4 Add answer reveal flow.
+- [ ] M3.5 Submit POST /study/cards/{cardId}/review.
+- [ ] M3.6 Use StudyPlatform.MOBILE.
+- [ ] M3.7 Generate clientEventId for each review.
+- [ ] M3.8 Reuse packages/core session engine where practical.
+- [ ] M3.9 Add study tests or smoke validation where practical.
+
+Acceptance Criteria:
+- Mobile can load today cards.
+- User can reveal answer.
+- User can submit AGAIN/HARD/GOOD.
+- Review request uses platform MOBILE.
+- Server remains authoritative for scheduling.
+- Mobile does not compute due_at locally.
+
+## Phase M4 — Mobile Pending Review Queue
+Status: Pending
+
+Goal:
+Preserve reviews when network calls fail.
+
+TODO:
+- [ ] M4.1 Add AsyncStorage-backed pending review queue.
+- [ ] M4.2 Reuse pending review event model from packages/core.
+- [ ] M4.3 Flush pending reviews on app start and before/after study.
+- [ ] M4.4 Reuse clientEventId for retries.
+- [ ] M4.5 Apply the same status-code policy as extension.
+- [ ] M4.6 Add pending queue tests or smoke validation.
+
+Acceptance Criteria:
+- Failed review submissions are queued.
+- Retried reviews reuse the same clientEventId.
+- Successful retry removes event from queue.
+- 401/403 preserves queue and requires login.
+- 404/409/422 remove event.
+- Network/5xx keeps event and increments attemptCount.
+- Queue is capped and old events are pruned.
+- Flush oldest first and at most 20 events per run.
+
+## Phase M5 — Mobile Mistakes and Profile
+Status: Pending
+
+Goal:
+Show mistake cards and profile/long-term memory summary.
+
+TODO:
+- [ ] M5.1 Fetch GET /study/mistakes.
+- [ ] M5.2 Render mistakes list.
+- [ ] M5.3 Fetch GET /profile/summary.
+- [ ] M5.4 Render long-term memory stats.
+- [ ] M5.5 Add loading, error, and empty states.
+- [ ] M5.6 Add tests or smoke validation where practical.
+
+Acceptance Criteria:
+- Mistake cards are visible.
+- Profile summary is visible.
+- Long-term memory stats are visible when available.
+- Existing API response shapes are respected.
+
+## Phase M6 — Mobile UX Polish
+Status: Pending
+
+Goal:
+Make the mobile MVP usable and visually coherent.
+
+TODO:
+- [ ] M6.1 Add card-based visual style.
+- [ ] M6.2 Add bottom tab navigation.
+- [ ] M6.3 Improve touch targets.
+- [ ] M6.4 Add consistent colors and typography.
+- [ ] M6.5 Add empty/error state polish.
+- [ ] M6.6 Run full CI.
+
+Acceptance Criteria:
+- Mobile UI is usable on phone-sized screens.
+- Primary study action is obvious.
+- Touch targets are large enough.
+- Loading/error/empty states are not broken.
+- Full CI passes or closest available validation passes with documented limitations.
+
 ## Work Log
 - Initial state file created. Phase 1 and Phase 2 marked complete. Phase 3 is active.
 
@@ -328,3 +463,10 @@ TODO:
 - T15.4 done: added content quality signals for active items, missing example sentences, tagged items, and sentence-ready items.
 - T15.5 done: added analytics and recommendation signal tests; `pnpm run ci` passed.
 - Phase 15 done: Analytics / Recommendation Improvements validated. All listed phases are complete.
+- M1.1 done: created `apps/mobile` from the Expo React Native TypeScript template. Files changed: `apps/mobile/package.json`, `apps/mobile/app.json`, generated assets. Files/functions inspected: root `package.json`, `pnpm-workspace.yaml`, `packages/core/package.json`. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M1.2.
+- M1.2 done: connected the mobile app to pnpm workspace scripts and root build/lint/typecheck/test commands. Files changed: root `package.json`, `apps/mobile/package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`. Files/functions inspected: existing root scripts for web/extension/core/api. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M1.3.
+- M1.3 done: configured Expo Router by switching mobile entry to `expo-router/entry` and adding `app/_layout.tsx`. Files changed: `apps/mobile/package.json`, `apps/mobile/app/_layout.tsx`, `apps/mobile/app.json`. Files/functions inspected: generated `App.tsx`, `index.ts`, Expo Router dependency config. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M1.4.
+- M1.4 done: verified `packages/core` imports through `apps/mobile/src/coreProbe.ts` and `coreProbe.test.ts`. Files changed: `apps/mobile/src/coreProbe.ts`, `apps/mobile/src/coreProbe.test.ts`, `apps/mobile/metro.config.js`, `apps/mobile/tsconfig.json`. Files/functions inspected: `packages/core/src/index.ts`, `packages/core/src/session.ts`, `packages/core/src/types.ts`. Validation: `pnpm -C apps/mobile test:unit` passed. Next TODO: M1.5.
+- M1.5 done: added practical mobile checks through `typecheck`, `test:unit`, `build`, and root workspace script aliases. Files changed: `apps/mobile/package.json`, `apps/mobile/vitest.config.ts`, root `package.json`. Files/functions inspected: web/extension package script patterns. Validation: `pnpm -C apps/mobile typecheck`, `pnpm -C apps/mobile test:unit`, `pnpm -C apps/mobile build` passed. Next TODO: M1.6.
+- M1.6 done: added a minimal study-focused home screen that renders through Expo Router and imports shared core constants. Files changed: `apps/mobile/app/index.tsx`. Files/functions inspected: existing product color direction from extension/web login UI. Validation: `pnpm -C apps/mobile build` passed. Next TODO: M2.1.
+- Phase M1 done: Mobile App Foundation validated; Phase M2(Mobile Auth) activated.
