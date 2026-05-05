@@ -84,6 +84,25 @@ describe("App", () => {
           recentWordbooks: []
         });
       }
+      if (url.includes("/study/mistakes")) {
+        return jsonResponse({
+          cards: [
+            {
+              cardId: 301,
+              memoryItemId: 201,
+              legacyWordId: 1,
+              wordbookId: 1,
+              cardType: "BASIC_KEY_TO_VALUE",
+              prompt: "airport",
+              answer: "공항",
+              status: "RELEARNING",
+              dueAt: "2026-05-04T00:00:00Z",
+              lapses: 1,
+              leechScore: 1
+            }
+          ]
+        });
+      }
       return jsonResponse({});
     });
 
@@ -117,8 +136,9 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "프로필" }));
     expect(screen.getByRole("heading", { name: "외운 단어" })).toBeInTheDocument();
-    expect(screen.getByText("airport")).toBeInTheDocument();
-    expect(screen.getByText("공항")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "실수 노트" })).toBeInTheDocument();
+    expect(screen.getAllByText("airport").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("공항").length).toBeGreaterThanOrEqual(1);
 
     await userEvent.click(screen.getByRole("button", { name: "단어장 편집" }));
     await userEvent.click(screen.getByRole("button", { name: "파일 가져오기" }));
@@ -223,6 +243,9 @@ describe("App", () => {
           memorizedWords: [],
           recentWordbooks: []
         });
+      }
+      if (url.includes("/study/mistakes")) {
+        return jsonResponse({ cards: [] });
       }
       return jsonResponse({});
     });

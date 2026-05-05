@@ -7,6 +7,7 @@ import type {
   ReviewRating,
   StudyPlatform,
   TodayStudyCard,
+  MistakeCard,
   TodayStudyResponse,
   UserProfile,
   Word,
@@ -244,6 +245,10 @@ function mapTodayStudyCard(card: ServerTodayStudyCard): TodayStudyCard {
   };
 }
 
+function mapMistakeCards(cards: ServerTodayStudyCard[]): MistakeCard[] {
+  return cards.map(mapTodayStudyCard);
+}
+
 function mapTodayStudyResponse(response: ServerTodayStudyResponse): TodayStudyResponse {
   return {
     summary: response.summary,
@@ -413,5 +418,13 @@ export const apiClient = {
   },
   async profileSummary() {
     return mapProfile(await request<ServerProfileSummary>("/profile/summary"));
+  },
+  async studyMistakes(wordbookId?: string, limit = 20) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (wordbookId) {
+      params.set("wordbookId", wordbookId);
+    }
+    const response = await request<{ cards: ServerTodayStudyCard[] }>(`/study/mistakes?${params.toString()}`);
+    return mapMistakeCards(response.cards);
   }
 };

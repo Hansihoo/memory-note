@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -179,6 +180,29 @@ def test_study_updates_progress_and_profile(client, auth_headers):
     assert summary["memorizedWords"][0]["key"] == "memory"
     assert summary["memorizedWords"][0]["value"] == "remembered information"
     assert summary["memorizedWords"][0]["knownCount"] == 1
+    assert "masteredCount" in summary
+    assert "weakCardCount" in summary
+
+
+def test_profile_summary_merges_legacy_and_review_dedup(client, auth_headers):
+    wordbook = client.post("/wordbooks", json={"name": "Merge"}, headers=auth_headers).json()
+    word = client.post(
+        f"/wordbooks/{wordbook['id']}/words",
+        json={"key": "merge", "value": "합치다"},
+        headers=auth_headers,
+    ).json()
+    client.post(f"/study/words/{word['id']}", json={"result": "known"}, headers=auth_headers)
+    today = client.get(f"/study/today?wordbookId={wordbook['id']}", headers=auth_headers).json()
+    card = today["cards"][0]
+    client.post(
+        f"/study/cards/{card['cardId']}/review",
+        json={"rating": "GOOD", "platform": "WEB", "clientEventId": "merge-good-1"},
+        headers=auth_headers,
+    )
+    summary = client.get("/profile/summary", headers=auth_headers).json()
+    assert summary["todayStudiedCount"] == 1
+    assert summary["cumulativeLearningDays"] >= 1
+    assert summary["memorizedWordCount"] == 1
 
 
 def test_item_type_controls_default_card_generation(client, auth_headers):
@@ -238,7 +262,7 @@ def test_study_today_returns_summary_filters_wordbook_and_spreads_related_cards(
     all_queue = client.get("/study/today?limit=10", headers=auth_headers)
     assert all_queue.status_code == 200
     all_body = all_queue.json()
-    assert set(all_body["summary"]) == {"dueCount", "newCount", "weakCount", "estimatedMinutes"}
+    assert {"dueCount", "newCount", "weakCount", "estimatedMinutes"}.issubset(set(all_body["summary"]))
     assert len(all_body["cards"]) == 6
     assert {card["wordbookId"] for card in all_body["cards"]} == {wordbook_one["id"], wordbook_two["id"]}
 
@@ -285,6 +309,67 @@ def test_card_review_idempotency_mistakes_and_conservative_mastered(client, auth
     mistakes = client.get(f"/study/mistakes?wordbookId={wordbook_id}", headers=auth_headers)
     assert mistakes.status_code == 200
     assert any(row["cardId"] == card["cardId"] for row in mistakes.json()["cards"])
+
+
+def test_study_mistakes_includes_recent_again_reviews_even_without_lapses(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import ReviewState
+    from app.security import utcnow
+
+    wordbook_id = client.post("/wordbooks", json={"name": "Mistakes recent"}, headers=auth_headers).json()["id"]
+    client.post(f"/wordbooks/{wordbook_id}/words", json={"key": "delta", "value": "변화"}, headers=auth_headers)
+    card = client.get(f"/study/today?wordbookId={wordbook_id}&limit=1", headers=auth_headers).json()["cards"][0]
+
+    client.post(
+        f"/study/cards/{card['cardId']}/review",
+        json={"rating": "AGAIN", "platform": "WEB", "clientEventId": "mistake-recent-again"},
+        headers=auth_headers,
+    )
+
+    db = SessionLocal()
+    try:
+        state = db.query(ReviewState).filter(ReviewState.card_id == card["cardId"]).one()
+        state.lapses = 0
+        state.leech_score = 0
+        state.updated_at = utcnow()
+        db.commit()
+    finally:
+        db.close()
+
+    mistakes = client.get(f"/study/mistakes?wordbookId={wordbook_id}", headers=auth_headers)
+    assert mistakes.status_code == 200
+    assert any(row["cardId"] == card["cardId"] for row in mistakes.json()["cards"])
+
+
+def test_study_today_samples_old_mastered_cards_with_filters(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import Card, MemoryItem, ReviewState
+
+    wb = client.post("/wordbooks", json={"name": "Mastered"}, headers=auth_headers).json()
+    w1 = client.post(f"/wordbooks/{wb['id']}/words", json={"key": "a", "value": "A"}, headers=auth_headers).json()
+    w2 = client.post(f"/wordbooks/{wb['id']}/words", json={"key": "b", "value": "B"}, headers=auth_headers).json()
+
+    today = client.get(f"/study/today?wordbookId={wb['id']}&limit=10", headers=auth_headers).json()
+    card_ids = [row["cardId"] for row in today["cards"]]
+    db = SessionLocal()
+    try:
+        states = db.query(ReviewState).join(Card, Card.id == ReviewState.card_id).filter(Card.id.in_(card_ids)).all()
+        for state in states:
+            state.status = "MASTERED"
+            state.due_at = datetime.now(timezone.utc) + timedelta(days=30)
+            state.last_reviewed_at = datetime.now(timezone.utc) - timedelta(days=20)
+            state.mastered_at = datetime.now(timezone.utc) - timedelta(days=40)
+        states[0].last_reviewed_at = datetime.now(timezone.utc) - timedelta(days=3)  # exclude recent
+        db.commit()
+    finally:
+        db.close()
+
+    sampled = client.get(f"/study/today?wordbookId={wb['id']}&limit=10", headers=auth_headers)
+    assert sampled.status_code == 200
+    body = sampled.json()
+    assert body["summary"].get("masteredCheckCount", 0) >= 1
+    assert len(body["cards"]) <= 10
+    assert len({row["cardId"] for row in body["cards"]}) == len(body["cards"])
 
 
 def test_deprecated_word_study_adapter_uses_card_review_service(client, auth_headers):

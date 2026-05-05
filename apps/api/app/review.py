@@ -287,7 +287,9 @@ class SimpleSRS(SchedulerService):
             due_at = reviewed_at + timedelta(days=interval_days)
             next_status = STATUS_REVIEW
 
-        if interval_days >= 30 and streak >= 5 and lapses <= 1:
+        can_use_difficulty = state.difficulty is not None
+        difficulty_allows_mastered = (difficulty <= 0.7) if can_use_difficulty else True
+        if state.status == STATUS_REVIEW and interval_days >= 30 and streak >= 5 and lapses <= 1 and difficulty_allows_mastered:
             next_status = STATUS_MASTERED
             mastered_at = mastered_at or reviewed_at
 
@@ -473,6 +475,36 @@ def today_summary(db: Session, user: User, wordbook_id: Optional[int] = None, no
         "weakCount": weak_count,
         "estimatedMinutes": max(1, math.ceil(min(total or base.count(), 20) * 0.35)) if (total or base.count()) else 0,
     }
+
+
+def sample_mastered_check_rows(
+    rows: List[Tuple[Card, MemoryItem, ReviewState]], limit: int, now: Optional[datetime] = None
+) -> List[Tuple[Card, MemoryItem, ReviewState]]:
+    now = now or utcnow()
+    if limit <= 0:
+        return []
+    mastered_limit = max(1, int(limit * 0.10))
+    cutoff = now - timedelta(days=7)
+    candidates = []
+    for row in rows:
+        card, _item, state = row
+        if state.status != STATUS_MASTERED:
+            continue
+        if state.due_at and comparable_datetime(state.due_at, datetime.max, now) <= now:
+            continue
+        if state.last_reviewed_at and comparable_datetime(state.last_reviewed_at, datetime.max, now) >= cutoff:
+            continue
+        candidates.append(row)
+
+    def mastered_key(row: Tuple[Card, MemoryItem, ReviewState]):
+        card, _item, state = row
+        if state.last_reviewed_at:
+            return comparable_datetime(state.last_reviewed_at, datetime.max, now)
+        if state.mastered_at:
+            return comparable_datetime(state.mastered_at, datetime.max, now)
+        return comparable_datetime(card.created_at or card.updated_at, datetime.max, now)
+
+    return sorted(candidates, key=mastered_key)[:mastered_limit]
 
 
 def review_log_item_ids_query(db: Session, user_id: int):

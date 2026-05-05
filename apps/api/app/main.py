@@ -1,11 +1,11 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy import case, func
+from sqlalchemy import case, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,11 @@ from .models import AuthToken, Card, LearningEvent, MemoryItem, ReviewLog, Revie
 from .review import (
     CARD_TYPE_KEY_TO_VALUE,
     RATING_AGAIN,
+    RATING_EASY,
+    RATING_GOOD,
+    RATING_HARD,
+    STATUS_MASTERED,
+    STATUS_REVIEW,
     RATING_BY_LEGACY_RESULT,
     backfill_review_models,
     calculate_retrievability,
@@ -26,6 +31,8 @@ from .review import (
     find_card_for_word,
     order_today_rows,
     review_card,
+    sample_mastered_check_rows,
+    spread_same_item_cards,
     today_cards_query,
     today_summary,
 )
@@ -641,8 +648,14 @@ def register_routes(api: FastAPI) -> None:
             get_user_wordbook(db, current_user, wordbookId)
         backfill_review_models(db, current_user)
         db.flush()
+        max_limit = max(1, min(limit, 100))
         rows = today_cards_query(db, current_user, wordbookId).all()
-        ordered_rows = order_today_rows(rows)[: max(1, min(limit, 100))]
+        ordered_base = order_today_rows(rows)
+        sampled_mastered = sample_mastered_check_rows(rows, max_limit)
+        sampled_ids = {row[0].id for row in sampled_mastered}
+        base_without_sampled = [row for row in ordered_base if row[0].id not in sampled_ids]
+        merged = spread_same_item_cards(base_without_sampled + sampled_mastered)
+        ordered_rows = merged[:max_limit]
         summary = today_summary(db, current_user, wordbookId)
         return TodayStudyResponse(
             summary=TodayStudySummary(
@@ -650,6 +663,7 @@ def register_routes(api: FastAPI) -> None:
                 new_count=summary["newCount"],
                 weak_count=summary["weakCount"],
                 estimated_minutes=summary["estimatedMinutes"],
+                mastered_check_count=len([row for row in ordered_rows if row[0].id in sampled_ids]),
             ),
             cards=[today_card_response(card, item, state) for card, item, state in ordered_rows],
         )
@@ -697,11 +711,25 @@ def register_routes(api: FastAPI) -> None:
             get_user_wordbook(db, current_user, wordbookId)
         backfill_review_models(db, current_user)
         db.flush()
-        rows = (
-            today_cards_query(db, current_user, wordbookId)
-            .filter((ReviewState.lapses > 0) | (ReviewState.leech_score > 0))
+        weak_since = utcnow() - timedelta(days=7)
+        weak_card_ids = {
+            row.card_id
+            for row in db.query(ReviewLog.card_id)
+            .filter(
+                ReviewLog.user_id == current_user.id,
+                ReviewLog.rating == RATING_AGAIN,
+                ReviewLog.reviewed_at >= weak_since,
+            )
             .all()
-        )
+        }
+        rows = today_cards_query(db, current_user, wordbookId).all()
+        rows = [
+            row
+            for row in rows
+            if (row[2].lapses or 0) > 0
+            or (row[2].leech_score or 0) > 0
+            or row[0].id in weak_card_ids
+        ]
         ordered_rows = order_today_rows(rows)[: max(1, min(limit, 100))]
         summary = today_summary(db, current_user, wordbookId)
         return TodayStudyResponse(
@@ -814,28 +842,118 @@ def register_routes(api: FastAPI) -> None:
         db: Session = Depends(get_db),
     ) -> ProfileSummary:
         today = utcnow().date().isoformat()
-        cumulative_days = (
-            db.query(func.count(func.distinct(func.date(LearningEvent.studied_at))))
-            .filter(LearningEvent.user_id == current_user.id)
-            .scalar()
-            or 0
-        )
-        today_count = (
-            db.query(func.count(LearningEvent.id))
-            .filter(LearningEvent.user_id == current_user.id, func.date(LearningEvent.studied_at) == today)
-            .scalar()
-            or 0
-        )
+        cumulative_days = profile_study_days(db, current_user.id)
+        today_count = profile_studied_today(db, current_user.id, today)
         summaries = recent_wordbook_summaries(db, current_user.id)
-        memorized_words = memorized_word_summaries(db, current_user.id)
-        memorized_word_count = memorized_word_total(db, current_user.id)
+        memorized_words = merged_memorized_word_summaries(db, current_user.id)
+        memorized_word_count = len(memorized_words)
         return ProfileSummary(
             cumulative_learning_days=cumulative_days,
             today_studied_count=today_count,
             memorized_word_count=memorized_word_count,
             memorized_words=memorized_words,
             recent_wordbooks=summaries,
+            mastered_count=profile_mastered_count(db, current_user.id),
+            weak_card_count=profile_weak_card_count(db, current_user.id),
         )
+
+
+def dedup_key(memory_item_id: Optional[int], word_id: Optional[int], card_id: Optional[int]) -> str:
+    if memory_item_id is not None:
+        return f"m:{memory_item_id}"
+    if word_id is not None:
+        return f"w:{word_id}"
+    return f"c:{card_id}"
+
+
+def profile_study_days(db: Session, user_id: int) -> int:
+    legacy_days = {row[0] for row in db.query(func.date(LearningEvent.studied_at)).filter(LearningEvent.user_id == user_id).distinct().all() if row[0]}
+    review_days = {row[0] for row in db.query(func.date(ReviewLog.reviewed_at)).filter(ReviewLog.user_id == user_id).distinct().all() if row[0]}
+    return len(legacy_days | review_days)
+
+
+def profile_studied_today(db: Session, user_id: int, today: str) -> int:
+    legacy = {
+        dedup_key(row.memory_item_id, row.word_id, None)
+        for row in db.query(Word.memory_item_id.label("memory_item_id"), LearningEvent.word_id.label("word_id"))
+        .join(Word, Word.id == LearningEvent.word_id)
+        .filter(LearningEvent.user_id == user_id, func.date(LearningEvent.studied_at) == today)
+        .distinct()
+        .all()
+    }
+    review = {
+        dedup_key(row.item_id, row.word_id, row.card_id)
+        for row in db.query(Card.item_id, Word.id.label("word_id"), ReviewLog.card_id)
+        .join(ReviewLog, ReviewLog.card_id == Card.id)
+        .outerjoin(Word, Word.memory_item_id == Card.item_id)
+        .filter(ReviewLog.user_id == user_id, func.date(ReviewLog.reviewed_at) == today)
+        .all()
+    }
+    return len(legacy | review)
+
+
+def merged_memorized_word_summaries(db: Session, user_id: int) -> List[MemorizedWordSummary]:
+    legacy_rows = memorized_word_summaries(db, user_id)
+    word_to_item = {
+        row.id: row.memory_item_id
+        for row in db.query(Word.id, Word.memory_item_id)
+        .join(Wordbook, Wordbook.id == Word.wordbook_id)
+        .filter(Wordbook.user_id == user_id)
+        .all()
+    }
+    merged: Dict[str, MemorizedWordSummary] = {}
+    for row in legacy_rows:
+        merged[dedup_key(word_to_item.get(row.word_id), row.word_id, None)] = row
+    review_rows = (
+        db.query(MemoryItem.id.label("item_id"), Word.id.label("word_id"), Card.id.label("card_id"), Card.wordbook_id, Wordbook.name, Card.prompt, Card.answer)
+        .join(Card, Card.item_id == MemoryItem.id)
+        .join(Wordbook, Wordbook.id == Card.wordbook_id)
+        .outerjoin(Word, Word.memory_item_id == MemoryItem.id)
+        .outerjoin(ReviewState, ReviewState.card_id == Card.id)
+        .outerjoin(ReviewLog, ReviewLog.card_id == Card.id)
+        .filter(
+            MemoryItem.user_id == user_id,
+            Card.active.is_(True),
+            Card.deleted_at.is_(None),
+            or_(ReviewState.status.in_([STATUS_REVIEW, STATUS_MASTERED]), ReviewLog.rating.in_([RATING_GOOD, RATING_HARD, RATING_EASY])),
+        )
+        .all()
+    )
+    for row in review_rows:
+        key = dedup_key(row.item_id, row.word_id, row.card_id)
+        if key in merged:
+            continue
+        merged[key] = MemorizedWordSummary(
+            word_id=row.word_id if row.word_id is not None else -row.card_id,
+            wordbook_id=row.wordbook_id,
+            wordbook_name=row.name,
+            key=row.prompt,
+            value=row.answer,
+            known_count=1,
+            last_studied_at=None,
+        )
+    return list(merged.values())[:50]
+
+
+def profile_mastered_count(db: Session, user_id: int) -> int:
+    mastered = (
+        db.query(func.count(func.distinct(Card.item_id)))
+        .join(ReviewState, ReviewState.card_id == Card.id)
+        .filter(ReviewState.user_id == user_id, ReviewState.status == STATUS_MASTERED)
+        .scalar()
+        or 0
+    )
+    return mastered if mastered > 0 else memorized_word_total(db, user_id)
+
+
+def profile_weak_card_count(db: Session, user_id: int) -> int:
+    return (
+        db.query(func.count(func.distinct(Card.item_id)))
+        .join(ReviewState, ReviewState.card_id == Card.id)
+        .filter(ReviewState.user_id == user_id, or_(ReviewState.lapses > 0, ReviewState.leech_score > 0))
+        .scalar()
+        or 0
+    )
 
 
 def logout_current_token(authorization: str, current_user: User, db: Session) -> MessageResponse:
