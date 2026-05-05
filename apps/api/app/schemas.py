@@ -64,8 +64,17 @@ class UserResponse(ApiModel):
     display_name: Optional[str] = Field(None, alias="displayName")
     avatar_url: Optional[str] = Field(None, alias="avatarUrl")
     auth_provider: str = Field(alias="authProvider")
+    fun_events_enabled: bool = Field(True, alias="funEventsEnabled")
     sync_revision: int = Field(alias="syncRevision")
     created_at: datetime = Field(alias="createdAt")
+
+
+class UserSettingsUpdate(BaseModel):
+    fun_events_enabled: Optional[bool] = Field(None, alias="funEventsEnabled")
+
+
+class UserSettingsResponse(ApiModel):
+    fun_events_enabled: bool = Field(alias="funEventsEnabled")
 
 
 class WordbookCreate(BaseModel):
@@ -89,11 +98,141 @@ class WordbookResponse(ApiModel):
     word_count: int = Field(0, alias="wordCount")
 
 
+class StudyGroupCreate(BaseModel):
+    name: constr(strip_whitespace=True, min_length=1, max_length=160)
+    description: Optional[str] = None
+
+
+class StudyGroupInviteRequest(BaseModel):
+    username: constr(strip_whitespace=True, min_length=3, max_length=80)
+
+
+class StudyGroupMembershipUpdate(BaseModel):
+    status: constr(strip_whitespace=True, regex="^(ACTIVE|DECLINED)$")
+
+
+class StudyGroupWordbookLinkRequest(BaseModel):
+    wordbook_id: int = Field(alias="wordbookId")
+
+
+class StudyGroupMemberResponse(ApiModel):
+    user_id: int = Field(alias="userId")
+    username: str
+    role: str
+    status: str
+    joined_at: Optional[datetime] = Field(None, alias="joinedAt")
+
+
+class StudyGroupWordbookResponse(ApiModel):
+    wordbook_id: int = Field(alias="wordbookId")
+    name: str
+    owner_user_id: int = Field(alias="ownerUserId")
+    added_by_user_id: int = Field(alias="addedByUserId")
+    created_at: datetime = Field(alias="createdAt")
+
+
+class StudyGroupResponse(ApiModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    owner_user_id: int = Field(alias="ownerUserId")
+    my_role: str = Field(alias="myRole")
+    my_status: str = Field(alias="myStatus")
+    member_count: int = Field(alias="memberCount")
+    linked_wordbook_count: int = Field(alias="linkedWordbookCount")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class StudyGroupProgressResponse(ApiModel):
+    group_id: int = Field(alias="groupId")
+    active_member_count: int = Field(alias="activeMemberCount")
+    linked_wordbook_count: int = Field(alias="linkedWordbookCount")
+    due_count: int = Field(alias="dueCount")
+    new_count: int = Field(alias="newCount")
+    weak_count: int = Field(alias="weakCount")
+    mastered_count: int = Field(alias="masteredCount")
+    review_count_30d: int = Field(alias="reviewCount30d")
+    correct_count_30d: int = Field(alias="correctCount30d")
+    recall_rate_30d: float = Field(alias="recallRate30d")
+
+
+class ClassCreate(BaseModel):
+    name: constr(strip_whitespace=True, min_length=1, max_length=160)
+    description: Optional[str] = None
+
+
+class ClassInviteRequest(BaseModel):
+    username: constr(strip_whitespace=True, min_length=3, max_length=80)
+
+
+class ClassMembershipUpdate(BaseModel):
+    status: constr(strip_whitespace=True, regex="^(ACTIVE|DECLINED)$")
+
+
+class ClassAssignmentCreate(BaseModel):
+    wordbook_id: int = Field(alias="wordbookId")
+    title: Optional[constr(strip_whitespace=True, min_length=1, max_length=240)] = None
+    description: Optional[str] = None
+    due_at: Optional[datetime] = Field(None, alias="dueAt")
+
+
+class ClassMemberResponse(ApiModel):
+    user_id: int = Field(alias="userId")
+    username: str
+    role: str
+    status: str
+    joined_at: Optional[datetime] = Field(None, alias="joinedAt")
+
+
+class ClassResponse(ApiModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    teacher_user_id: int = Field(alias="teacherUserId")
+    my_role: str = Field(alias="myRole")
+    my_status: str = Field(alias="myStatus")
+    student_count: int = Field(alias="studentCount")
+    assignment_count: int = Field(alias="assignmentCount")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class ClassAssignmentResponse(ApiModel):
+    id: int
+    class_id: int = Field(alias="classId")
+    wordbook_id: int = Field(alias="wordbookId")
+    title: str
+    description: Optional[str] = None
+    due_at: Optional[datetime] = Field(None, alias="dueAt")
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+
+
+class ClassAssignmentProgress(ApiModel):
+    assignment_id: int = Field(alias="assignmentId")
+    title: str
+    assigned_count: int = Field(alias="assignedCount")
+    review_count_30d: int = Field(alias="reviewCount30d")
+    correct_count_30d: int = Field(alias="correctCount30d")
+    recall_rate_30d: float = Field(alias="recallRate30d")
+
+
+class TeacherClassDashboardResponse(ApiModel):
+    class_id: int = Field(alias="classId")
+    active_student_count: int = Field(alias="activeStudentCount")
+    assignment_count: int = Field(alias="assignmentCount")
+    assignments: List[ClassAssignmentProgress]
+
+
 class WordCreate(BaseModel):
     key: constr(strip_whitespace=True, min_length=1)
     value: constr(strip_whitespace=True, min_length=1)
     last_viewed_at: Optional[datetime] = Field(None, alias="lastViewedAt")
     item_type: Optional[constr(strip_whitespace=True, regex="^(WORD|QA|COMMAND|SENTENCE)$")] = Field("WORD", alias="itemType")
+    example_sentence: Optional[constr(strip_whitespace=True, min_length=1)] = Field(None, alias="exampleSentence")
+    tags: Optional[List[str]] = None
+    cloze_text: Optional[constr(strip_whitespace=True, min_length=1)] = Field(None, alias="cloze")
 
 
 class WordUpdate(BaseModel):
@@ -101,6 +240,9 @@ class WordUpdate(BaseModel):
     value: Optional[constr(strip_whitespace=True, min_length=1)] = None
     last_viewed_at: Optional[datetime] = Field(None, alias="lastViewedAt")
     item_type: Optional[constr(strip_whitespace=True, regex="^(WORD|QA|COMMAND|SENTENCE)$")] = Field(None, alias="itemType")
+    example_sentence: Optional[constr(strip_whitespace=True, min_length=1)] = Field(None, alias="exampleSentence")
+    tags: Optional[List[str]] = None
+    cloze_text: Optional[constr(strip_whitespace=True, min_length=1)] = Field(None, alias="cloze")
 
 
 class WordResponse(ApiModel):
@@ -114,6 +256,9 @@ class WordResponse(ApiModel):
     deleted_at: Optional[datetime] = Field(None, alias="deletedAt")
     sync_revision: int = Field(alias="syncRevision")
     item_type: str = Field("WORD", alias="itemType")
+    example_sentence: Optional[str] = Field(None, alias="exampleSentence")
+    tags: Optional[List[str]] = None
+    cloze_text: Optional[str] = Field(None, alias="cloze")
 
 
 class WordBatchItem(WordCreate):
@@ -231,6 +376,11 @@ class ProfileSummary(ApiModel):
     recent_wordbooks: List[WordbookStudySummary] = Field(alias="recentWordbooks")
     mastered_count: Optional[int] = Field(None, alias="masteredCount")
     weak_card_count: Optional[int] = Field(None, alias="weakCardCount")
+    long_term_review_count_30d: Optional[int] = Field(None, alias="longTermReviewCount30d")
+    long_term_correct_count_30d: Optional[int] = Field(None, alias="longTermCorrectCount30d")
+    long_term_recall_rate_30d: Optional[float] = Field(None, alias="longTermRecallRate30d")
+    mastered_lapse_count_30d: Optional[int] = Field(None, alias="masteredLapseCount30d")
+    old_mastered_due_count: Optional[int] = Field(None, alias="oldMasteredDueCount")
 
 
 class MessageResponse(BaseModel):

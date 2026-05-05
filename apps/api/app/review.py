@@ -1,4 +1,5 @@
 import math
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -6,7 +7,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from .models import Card, MemoryItem, ReviewLog, ReviewState, User, Word, Wordbook
+from .config import get_scheduler_engine
+from .models import Card, MemoryItem, ReviewLog, ReviewState, StudyEvent, User, Word, Wordbook
 from .security import utcnow
 
 
@@ -45,7 +47,44 @@ CARD_TYPE_BY_DIRECTION = {
 }
 
 
-def create_default_cards_for_item(item: MemoryItem) -> List[Dict[str, str]]:
+def cloze_card_from_example(item: MemoryItem) -> Dict[str, Any]:
+    explicit_cloze = (item.cloze_text or "").strip()
+    if explicit_cloze:
+        match = re.search(r"\{\{c\d+::(.+?)(?:::.*?)?\}\}", explicit_cloze)
+        if match:
+            answer = match.group(1)
+            prompt = re.sub(r"\{\{c\d+::(.+?)(?:::.*?)?\}\}", "____", explicit_cloze, count=1)
+        else:
+            prompt = explicit_cloze
+            answer = item.key
+        return {
+            "card_type": CARD_TYPE_CLOZE,
+            "prompt": prompt,
+            "answer": answer,
+            "explanation": item.example_sentence or explicit_cloze,
+            "metadata_json": {"source": "cloze", "answer": answer},
+        }
+
+    sentence = (item.example_sentence or "").strip()
+    for answer in [item.key, item.value]:
+        if answer and answer in sentence:
+            return {
+                "card_type": CARD_TYPE_CLOZE,
+                "prompt": sentence.replace(answer, "____", 1),
+                "answer": answer,
+                "explanation": sentence,
+                "metadata_json": {"source": "exampleSentence", "answer": answer},
+            }
+    return {
+        "card_type": CARD_TYPE_CLOZE,
+        "prompt": f"{sentence}\n____",
+        "answer": item.key,
+        "explanation": sentence,
+        "metadata_json": {"source": "exampleSentence", "answer": item.key},
+    }
+
+
+def create_default_cards_for_item(item: MemoryItem) -> List[Dict[str, Any]]:
     if item.item_type == ITEM_TYPE_SENTENCE:
         return []
 
@@ -65,6 +104,17 @@ def create_default_cards_for_item(item: MemoryItem) -> List[Dict[str, str]]:
                 "answer": item.key,
             }
         )
+        if item.example_sentence or item.cloze_text:
+            cards.append(cloze_card_from_example(item))
+        if item.example_sentence:
+            cards.append(
+                {
+                    "card_type": CARD_TYPE_TYPING,
+                    "prompt": item.example_sentence,
+                    "answer": item.key,
+                    "hint": item.value,
+                }
+            )
 
     return cards
 
@@ -74,6 +124,12 @@ def ensure_memory_item_for_word(
     user: User,
     word: Word,
     item_type: str = ITEM_TYPE_WORD,
+    example_sentence: Optional[str] = None,
+    update_example_sentence: bool = False,
+    tags: Optional[List[str]] = None,
+    update_tags: bool = False,
+    cloze_text: Optional[str] = None,
+    update_cloze_text: bool = False,
 ) -> MemoryItem:
     item = word.memory_item
     now = utcnow()
@@ -96,6 +152,9 @@ def ensure_memory_item_for_word(
             key=word.key,
             value=word.value,
             item_type=item_type,
+            example_sentence=example_sentence,
+            tags=tags,
+            cloze_text=cloze_text,
             source="legacy-word",
             created_at=word.created_at or now,
             updated_at=now,
@@ -108,6 +167,13 @@ def ensure_memory_item_for_word(
         item.legacy_word_id = word.id
         item.key = word.key
         item.value = word.value
+        item.item_type = item_type
+        if update_example_sentence:
+            item.example_sentence = example_sentence
+        if update_tags:
+            item.tags = tags
+        if update_cloze_text:
+            item.cloze_text = cloze_text
         item.updated_at = now
         if item.deleted_at is not None and word.deleted_at is None:
             item.deleted_at = None
@@ -123,6 +189,8 @@ def ensure_default_cards_for_item(
     item: MemoryItem,
 ) -> List[Card]:
     desired_cards = create_default_cards_for_item(item)
+    desired_types = {card["card_type"] for card in desired_cards}
+    managed_types = {CARD_TYPE_KEY_TO_VALUE, CARD_TYPE_VALUE_TO_KEY, CARD_TYPE_CLOZE, CARD_TYPE_TYPING}
     existing_cards = {
         card.card_type: card
         for card in db.query(Card)
@@ -141,6 +209,9 @@ def ensure_default_cards_for_item(
                 card_type=desired["card_type"],
                 prompt=desired["prompt"],
                 answer=desired["answer"],
+                hint=desired.get("hint"),
+                explanation=desired.get("explanation"),
+                metadata_json=desired.get("metadata_json"),
                 active=item.deleted_at is None,
             )
             db.add(card)
@@ -150,6 +221,9 @@ def ensure_default_cards_for_item(
             card.wordbook_id = item.wordbook_id
             card.prompt = desired["prompt"]
             card.answer = desired["answer"]
+            card.hint = desired.get("hint")
+            card.explanation = desired.get("explanation")
+            card.metadata_json = desired.get("metadata_json")
             card.active = item.deleted_at is None
             if item.deleted_at is None:
                 card.deleted_at = None
@@ -157,6 +231,13 @@ def ensure_default_cards_for_item(
 
         ensure_review_state(db, user.id, card)
         cards.append(card)
+
+    now = utcnow()
+    for card_type, card in existing_cards.items():
+        if card_type in managed_types and card_type not in desired_types:
+            card.active = False
+            card.deleted_at = card.deleted_at or now
+            card.updated_at = now
 
     return cards
 
@@ -238,6 +319,10 @@ class SchedulerService:
         raise NotImplementedError
 
 
+def clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(upper, value))
+
+
 class SimpleSRS(SchedulerService):
     def review(self, state: ReviewState, rating: str, reviewed_at: datetime) -> Dict[str, Any]:
         reps = int(state.reps or 0) + 1
@@ -309,6 +394,96 @@ class SimpleSRS(SchedulerService):
         }
 
 
+class FSRSScheduler(SchedulerService):
+    initial_stability = {
+        RATING_HARD: 1.0,
+        RATING_GOOD: 2.5,
+        RATING_EASY: 4.0,
+    }
+    stability_bonus = {
+        RATING_HARD: 0.65,
+        RATING_GOOD: 1.0,
+        RATING_EASY: 1.45,
+    }
+    difficulty_delta = {
+        RATING_HARD: 0.08,
+        RATING_GOOD: -0.03,
+        RATING_EASY: -0.08,
+    }
+    maximum_interval_days = 3650.0
+
+    def review(self, state: ReviewState, rating: str, reviewed_at: datetime) -> Dict[str, Any]:
+        reps = int(state.reps or 0) + 1
+        lapses = int(state.lapses or 0)
+        streak = int(state.streak or 0)
+        interval_days = float(state.interval_days or 0)
+        ease = float(state.ease_factor or 2.5)
+        difficulty = clamp(float(state.difficulty or 0.3), 0.0, 1.0)
+        stability = max(0.0, float(state.stability or 0))
+        leech_score = int(state.leech_score or 0)
+        mastered_at = state.mastered_at
+        retrievability = calculate_retrievability(state, reviewed_at)
+
+        if rating == RATING_AGAIN:
+            lapses += 1
+            streak = 0
+            difficulty = clamp(difficulty + 0.12, 0.0, 1.0)
+            stability = max(0.1, stability * max(0.3, 0.55 - retrievability * 0.25))
+            interval_days = 10 / (24 * 60)
+            ease = max(1.3, ease - 0.2)
+            leech_score += 2
+            due_at = reviewed_at + timedelta(minutes=10)
+            next_status = STATUS_RELEARNING
+        else:
+            streak += 1
+            difficulty = clamp(difficulty + self.difficulty_delta[rating] + (0.3 - difficulty) * 0.05, 0.0, 1.0)
+            if stability <= 0:
+                stability = self.initial_stability[rating]
+            else:
+                stability_decay = max(0.35, stability ** -0.15)
+                recall_bonus = 1.0 + max(0.0, 1.0 - retrievability)
+                gain = 1.0 + self.stability_bonus[rating] * max(0.15, 1.0 - difficulty) * recall_bonus * stability_decay
+                stability = max(stability + 0.1, stability * gain)
+            interval_days = min(self.maximum_interval_days, max(1.0, stability))
+            if rating == RATING_HARD:
+                ease = max(1.3, ease - 0.05)
+                leech_score = max(0, leech_score - 1)
+            elif rating == RATING_EASY:
+                ease = min(3.2, ease + 0.1)
+                leech_score = max(0, leech_score - 2)
+            else:
+                leech_score = max(0, leech_score - 1)
+            due_at = reviewed_at + timedelta(days=interval_days)
+            next_status = STATUS_REVIEW
+
+        can_use_difficulty = state.difficulty is not None
+        difficulty_allows_mastered = (difficulty <= 0.7) if can_use_difficulty else True
+        if state.status == STATUS_REVIEW and interval_days >= 30 and streak >= 5 and lapses <= 1 and difficulty_allows_mastered:
+            next_status = STATUS_MASTERED
+            mastered_at = mastered_at or reviewed_at
+
+        return {
+            "status": next_status,
+            "due_at": due_at,
+            "last_reviewed_at": reviewed_at,
+            "reps": reps,
+            "lapses": lapses,
+            "streak": streak,
+            "interval_days": interval_days,
+            "ease_factor": ease,
+            "difficulty": difficulty,
+            "stability": stability,
+            "leech_score": leech_score,
+            "mastered_at": mastered_at,
+        }
+
+
+def scheduler_from_config() -> SchedulerService:
+    if get_scheduler_engine() == "fsrs":
+        return FSRSScheduler()
+    return SimpleSRS()
+
+
 def review_state_snapshot(state: ReviewState) -> Dict[str, Any]:
     return {
         "status": state.status,
@@ -375,7 +550,7 @@ def review_card(
             db.refresh(state)
             return card, state, existing_log, True
 
-    scheduler = scheduler or SimpleSRS()
+    scheduler = scheduler or scheduler_from_config()
     reviewed_at = reviewed_at or utcnow()
     before = review_state_snapshot(state)
     next_state = scheduler.review(state, rating, reviewed_at)
@@ -402,8 +577,42 @@ def review_card(
         client_event_id=client_event_id,
     )
     db.add(log)
+    add_study_events(db, user, card, before, after, rating, reviewed_at)
     db.flush()
     return card, state, log, False
+
+
+def add_study_events(db: Session, user: User, card: Card, before: Dict[str, Any], after: Dict[str, Any], rating: str, reviewed_at: datetime) -> None:
+    if user.fun_events_enabled is False:
+        return
+
+    event_types: List[str] = []
+    before_status = before.get("status")
+    after_status = after.get("status")
+    before_leech = int(before.get("leechScore") or 0)
+    after_leech = int(after.get("leechScore") or 0)
+
+    if before_status != STATUS_MASTERED and after_status == STATUS_MASTERED:
+        event_types.append("MASTERED")
+    if before_status == STATUS_MASTERED and rating == RATING_AGAIN:
+        event_types.append("MASTERED_LAPSE")
+    if before_leech < 3 <= after_leech:
+        event_types.append("LEECH")
+    if before_status == STATUS_MASTERED and rating in {RATING_HARD, RATING_GOOD, RATING_EASY}:
+        event_types.append("ZOMBIE_REVIEW")
+
+    for event_type in event_types:
+        db.add(
+            StudyEvent(
+                user_id=user.id,
+                wordbook_id=card.wordbook_id,
+                card_id=card.id,
+                memory_item_id=card.item_id,
+                event_type=event_type,
+                metadata_json={"rating": rating, "beforeStatus": before_status, "afterStatus": after_status},
+                created_at=reviewed_at,
+            )
+        )
 
 
 def today_cards_query(db: Session, user: User, wordbook_id: Optional[int] = None):

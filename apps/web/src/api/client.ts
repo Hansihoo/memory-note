@@ -53,6 +53,9 @@ interface ServerWord {
   key: string;
   value: string;
   itemType?: Word["itemType"];
+  exampleSentence?: string | null;
+  tags?: string[] | null;
+  cloze?: string | null;
   lastViewedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -87,6 +90,13 @@ interface ServerProfileSummary {
     unknownCount: number;
     lastStudiedAt: string | null;
   }>;
+  masteredCount?: number;
+  weakCardCount?: number;
+  longTermReviewCount30d?: number;
+  longTermCorrectCount30d?: number;
+  longTermRecallRate30d?: number | null;
+  masteredLapseCount30d?: number;
+  oldMasteredDueCount?: number;
 }
 
 interface ServerTodayStudyCard {
@@ -172,6 +182,9 @@ function mapWord(word: ServerWord): Word {
     key: word.key,
     value: word.value,
     itemType: word.itemType ?? "WORD",
+    exampleSentence: word.exampleSentence ?? null,
+    tags: word.tags ?? null,
+    cloze: word.cloze ?? null,
     lastViewedAt: word.lastViewedAt,
     createdAt: word.createdAt,
     updatedAt: word.updatedAt,
@@ -224,7 +237,14 @@ function mapProfile(summary: ServerProfileSummary): ProfileSummary {
       knownCount: wordbook.knownCount,
       unknownCount: wordbook.unknownCount,
       lastStudiedAt: wordbook.lastStudiedAt
-    }))
+    })),
+    masteredCount: summary.masteredCount ?? 0,
+    weakCardCount: summary.weakCardCount ?? 0,
+    longTermReviewCount30d: summary.longTermReviewCount30d ?? 0,
+    longTermCorrectCount30d: summary.longTermCorrectCount30d ?? 0,
+    longTermRecallRate30d: summary.longTermRecallRate30d ?? 0,
+    masteredLapseCount30d: summary.masteredLapseCount30d ?? 0,
+    oldMasteredDueCount: summary.oldMasteredDueCount ?? 0
   };
 }
 
@@ -357,21 +377,21 @@ export const apiClient = {
     const words = await request<ServerWord[]>(`/wordbooks/${wordbookId}/words`);
     return words.map(mapWord);
   },
-  async createWord(wordbookId: string, payload: Pick<Word, "key" | "value"> & { lastViewedAt?: string | null }) {
+  async createWord(wordbookId: string, payload: Pick<Word, "key" | "value"> & { lastViewedAt?: string | null; exampleSentence?: string | null; tags?: string[] | null; cloze?: string | null }) {
     const word = await request<ServerWord>(`/wordbooks/${wordbookId}/words`, {
       method: "POST",
       body: JSON.stringify(payload)
     });
     return mapWord(word);
   },
-  async batchWords(wordbookId: string, words: Array<Pick<Word, "key" | "value"> & { lastViewedAt?: string | null }>) {
+  async batchWords(wordbookId: string, words: Array<Pick<Word, "key" | "value"> & { lastViewedAt?: string | null; exampleSentence?: string | null; tags?: string[] | null; cloze?: string | null }>) {
     const result = await request<{ words: ServerWord[] }>(`/wordbooks/${wordbookId}/words/batch`, {
       method: "POST",
       body: JSON.stringify({ words })
     });
     return result.words.map(mapWord);
   },
-  async updateWord(wordId: string, payload: Partial<Pick<Word, "key" | "value" | "lastViewedAt">>) {
+  async updateWord(wordId: string, payload: Partial<Pick<Word, "key" | "value" | "lastViewedAt" | "exampleSentence" | "tags" | "cloze">>) {
     const word = await request<ServerWord>(`/words/${wordId}`, {
       method: "PATCH",
       body: JSON.stringify(payload)
@@ -396,6 +416,7 @@ export const apiClient = {
       clientEventId?: string;
       latencyMs?: number;
       confidence?: number;
+      responseText?: string;
     }
   ) {
     return mapCardReview(
@@ -408,7 +429,7 @@ export const apiClient = {
   async studyWord(
     wordId: string,
     result: "known" | "unknown",
-    options: { cardType?: CardType; platform?: StudyPlatform; clientEventId?: string } = {}
+    options: { cardType?: CardType; platform?: StudyPlatform; clientEventId?: string; responseText?: string } = {}
   ) {
     const response = await request<{ word: ServerWord }>(`/study/words/${wordId}`, {
       method: "POST",

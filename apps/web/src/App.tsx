@@ -1,7 +1,7 @@
 import { BookOpen, Check, ChevronLeft, ChevronRight, Download, LogOut, Plus, Trash2, Upload, Volume2, VolumeX, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, FormEvent } from "react";
-import { BASIC_REVIEW_RATING_BY_ACTION, StudyPlatform } from "@memory-note/core";
+import { BASIC_REVIEW_RATING_BY_ACTION, CardType, StudyPlatform } from "@memory-note/core";
 import { apiClient } from "./api/client";
 import type { MistakeCard, ProfileSummary, ReviewRating, UserProfile, Word, Wordbook } from "./types";
 import { parseWordMarkdown, serializeWordsToMarkdown } from "./utils/markdown";
@@ -248,7 +248,14 @@ const emptyProfile: ProfileSummary = {
   todayStudiedCount: 0,
   memorizedWordCount: 0,
   memorizedWords: [],
-  recentWordbooks: []
+  recentWordbooks: [],
+  masteredCount: 0,
+  weakCardCount: 0,
+  longTermReviewCount30d: 0,
+  longTermCorrectCount30d: 0,
+  longTermRecallRate30d: 0,
+  masteredLapseCount30d: 0,
+  oldMasteredDueCount: 0
 };
 
 interface DraftRow {
@@ -542,6 +549,7 @@ export function App() {
   const [googleDriveLoading, setGoogleDriveLoading] = useState(false);
   const [session, setSession] = useState<StudySession | null>(null);
   const [reviewState, setReviewState] = useState<ReviewState>("question");
+  const [typingAnswer, setTypingAnswer] = useState("");
   const [studyQueueLoading, setStudyQueueLoading] = useState(false);
   const [selectedCell, setSelectedCell] = useState<SheetSelection | null>(null);
   const [homeView, setHomeView] = useState<HomeView>("study");
@@ -553,6 +561,7 @@ export function App() {
 
   const activeWordbook = wordbooks.find((wordbook) => wordbook.id === activeWordbookId) ?? wordbooks[0] ?? null;
   const currentCard = session ? getCurrentCard(session) : null;
+  const isTypingCard = currentCard?.cardType === CardType.TYPING;
   const speechAvailable = speechDriver.isAvailable();
   const importValidation = useMemo(() => validateMarkdownImport(markdown), [markdown]);
   const googleLoginAvailable = hasGoogleLoginConfig();
@@ -574,7 +583,7 @@ export function App() {
     currentCard?.answer,
     currentCard?.direction,
     currentCard?.prompt,
-    currentCard?.word.id,
+    currentCard?.id,
     homeView,
     session?.index,
     session?.revealed,
@@ -583,7 +592,7 @@ export function App() {
     speechEnabled
   ]);
 
-  async function createWordbookWithWords(name: string, wordsToCreate: Array<Pick<Word, "key" | "value">>): Promise<Wordbook> {
+  async function createWordbookWithWords(name: string, wordsToCreate: Array<Pick<Word, "key" | "value"> & { exampleSentence?: string | null }>): Promise<Wordbook> {
     const wordbook = await apiClient.createWordbook(name);
     const words = await apiClient.batchWords(wordbook.id, wordsToCreate);
     return { ...wordbook, words };
@@ -692,6 +701,7 @@ export function App() {
   function resetStudySession() {
     setSession(null);
     setReviewState("question");
+    setTypingAnswer("");
   }
 
   function selectSheetCell(rowId: string, column: SheetColumn) {
@@ -1093,6 +1103,7 @@ export function App() {
   function goNextCard() {
     setSession((current) => (current ? nextCard(current) : current));
     setReviewState("question");
+    setTypingAnswer("");
   }
 
   function handleToggleSpeech() {
@@ -1118,7 +1129,8 @@ export function App() {
       const result = await apiClient.reviewCard(currentCard.cardId, {
         rating,
         platform: StudyPlatform.WEB,
-        clientEventId: createClientEventId(currentCard.cardId, rating)
+        clientEventId: createClientEventId(currentCard.cardId, rating),
+        responseText: isTypingCard ? typingAnswer.trim() : undefined
       });
       const viewedAt = result.lastReviewedAt ?? new Date().toISOString();
       if (result.legacyWordId) {
@@ -1133,10 +1145,12 @@ export function App() {
     if (!activeWordbook) {
       return;
     }
-    const updated = await apiClient.studyWord(currentCard.word.id, rating === "AGAIN" ? "unknown" : "known", {
+    const fallbackWordId = currentCard.legacyWordId ?? currentCard.id;
+    const updated = await apiClient.studyWord(fallbackWordId, rating === "AGAIN" ? "unknown" : "known", {
       cardType: currentCard.cardType ?? cardTypeFromDirection(currentCard.direction),
       platform: StudyPlatform.WEB,
-      clientEventId: createClientEventId(currentCard.word.id, rating)
+      clientEventId: createClientEventId(fallbackWordId, rating),
+      responseText: isTypingCard ? typingAnswer.trim() : undefined
     });
     setWordbooks((current) =>
       updateWordbookWords(current, activeWordbook.id, (words) => words.map((word) => (word.id === updated.id ? updated : word)))
@@ -1337,6 +1351,16 @@ export function App() {
                   <section className={session?.revealed ? "notebook-section notebook-answer revealed" : "notebook-section notebook-answer"} aria-label="뒷면">
                     {session?.revealed ? <strong className={studyTextClassName("study-answer", currentCard.answer)}>{currentCard.answer}</strong> : null}
                   </section>
+                  {isTypingCard && !session?.revealed ? (
+                    <label className="typing-answer-field">
+                      <span>답 입력</span>
+                      <input
+                        value={typingAnswer}
+                        onChange={(event) => setTypingAnswer(event.target.value)}
+                        aria-label="답 입력"
+                      />
+                    </label>
+                  ) : null}
                 </article>
               ) : (
                 <article className="memory-card notebook-card empty-notebook" aria-label="단어 암기장">
@@ -1635,6 +1659,27 @@ export function App() {
                 <small>외운 단어</small>
               </div>
             </div>
+            <section className="memorized-list" aria-label="장기 기억 통계">
+              <h2>장기 기억</h2>
+              <div className="profile-stats long-term-stats">
+                <div>
+                  <span>{summary.masteredCount}</span>
+                  <small>마스터한 항목</small>
+                </div>
+                <div>
+                  <span>{Math.round(summary.longTermRecallRate30d * 100)}%</span>
+                  <small>30일 회상률</small>
+                </div>
+                <div>
+                  <span>{summary.longTermReviewCount30d}</span>
+                  <small>30일 장기 복습</small>
+                </div>
+                <div>
+                  <span>{summary.oldMasteredDueCount}</span>
+                  <small>점검 후보</small>
+                </div>
+              </div>
+            </section>
             <section className="memorized-list" aria-label="외운 단어 목록">
               <h2>외운 단어</h2>
               {summary.memorizedWords.length > 0 ? (

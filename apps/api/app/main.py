@@ -1,6 +1,7 @@
 import logging
+import re
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,7 +15,24 @@ from .database import get_db, init_db
 from .deps import get_current_user, get_user_word, get_user_wordbook
 from .google_auth import verify_google_id_token
 from .logging_config import configure_logging, debug_log
-from .models import AuthToken, Card, LearningEvent, MemoryItem, ReviewLog, ReviewState, SyncEvent, User, Word, Wordbook
+from .models import (
+    AuthToken,
+    Card,
+    ClassAssignment,
+    ClassMember,
+    LearningEvent,
+    MemoryItem,
+    ReviewLog,
+    ReviewState,
+    StudyGroup,
+    StudyGroupMember,
+    StudyGroupWordbook,
+    SyncEvent,
+    TeacherClass,
+    User,
+    Word,
+    Wordbook,
+)
 from .review import (
     CARD_TYPE_KEY_TO_VALUE,
     RATING_AGAIN,
@@ -22,10 +40,13 @@ from .review import (
     RATING_GOOD,
     RATING_HARD,
     STATUS_MASTERED,
+    STATUS_NEW,
     STATUS_REVIEW,
+    STATUS_SUSPENDED,
     RATING_BY_LEGACY_RESULT,
     backfill_review_models,
     calculate_retrievability,
+    comparable_datetime,
     deactivate_memory_item_for_word,
     ensure_memory_item_for_word,
     find_card_for_word,
@@ -38,6 +59,14 @@ from .review import (
 )
 from .schemas import (
     AuthRequest,
+    ClassAssignmentCreate,
+    ClassAssignmentProgress,
+    ClassAssignmentResponse,
+    ClassCreate,
+    ClassInviteRequest,
+    ClassMemberResponse,
+    ClassMembershipUpdate,
+    ClassResponse,
     CardReviewRequest,
     CardReviewResponse,
     CardStatus,
@@ -47,11 +76,20 @@ from .schemas import (
     MessageResponse,
     ProfileSummary,
     ReviewRating,
+    StudyGroupCreate,
+    StudyGroupInviteRequest,
+    StudyGroupMemberResponse,
+    StudyGroupMembershipUpdate,
+    StudyGroupProgressResponse,
+    StudyGroupResponse,
+    StudyGroupWordbookLinkRequest,
+    StudyGroupWordbookResponse,
     StudyRequest,
     StudyResponse,
     TodayStudyCard,
     TodayStudyResponse,
     TodayStudySummary,
+    TeacherClassDashboardResponse,
     SyncApplied,
     SyncChange,
     SyncConflict,
@@ -60,6 +98,8 @@ from .schemas import (
     SyncPushResponse,
     TokenResponse,
     UserResponse,
+    UserSettingsResponse,
+    UserSettingsUpdate,
     WordBatchRequest,
     WordBatchResponse,
     WordCreate,
@@ -74,6 +114,14 @@ from .security import hash_password, hash_token, issue_token, utcnow, verify_pas
 
 
 logger = logging.getLogger(__name__)
+
+GROUP_ROLE_OWNER = "OWNER"
+GROUP_ROLE_MEMBER = "MEMBER"
+GROUP_STATUS_ACTIVE = "ACTIVE"
+GROUP_STATUS_PENDING = "PENDING"
+GROUP_STATUS_DECLINED = "DECLINED"
+CLASS_ROLE_TEACHER = "TEACHER"
+CLASS_ROLE_STUDENT = "STUDENT"
 
 
 def create_app() -> FastAPI:
@@ -114,7 +162,10 @@ def wordbook_response(db: Session, wordbook: Wordbook) -> WordbookResponse:
 
 def word_response(word: Word) -> WordResponse:
     item_type = word.memory_item.item_type if word.memory_item is not None else "WORD"
-    return WordResponse.from_orm(word).copy(update={"item_type": item_type})
+    example_sentence = word.memory_item.example_sentence if word.memory_item is not None else None
+    tags = word.memory_item.tags if word.memory_item is not None else None
+    cloze_text = word.memory_item.cloze_text if word.memory_item is not None else None
+    return WordResponse.from_orm(word).copy(update={"item_type": item_type, "example_sentence": example_sentence, "tags": tags, "cloze_text": cloze_text})
 
 
 def issue_user_token(db: Session, user: User) -> TokenResponse:
@@ -211,6 +262,310 @@ def card_review_response(card: Card, state: ReviewState, rating: str, review_log
     )
 
 
+def study_group_member_response(member: StudyGroupMember) -> StudyGroupMemberResponse:
+    return StudyGroupMemberResponse(
+        user_id=member.user_id,
+        username=member.user.username,
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at,
+    )
+
+
+def get_study_group_membership(
+    db: Session,
+    user: User,
+    group_id: int,
+    statuses: Optional[List[str]] = None,
+) -> Tuple[StudyGroup, StudyGroupMember]:
+    query = (
+        db.query(StudyGroup, StudyGroupMember)
+        .join(StudyGroupMember, StudyGroupMember.group_id == StudyGroup.id)
+        .filter(
+            StudyGroup.id == group_id,
+            StudyGroup.deleted_at.is_(None),
+            StudyGroupMember.user_id == user.id,
+        )
+    )
+    if statuses is not None:
+        query = query.filter(StudyGroupMember.status.in_(statuses))
+    row = query.first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study group not found")
+    group, membership = row
+    return group, membership
+
+
+def require_active_group_member(db: Session, user: User, group_id: int) -> Tuple[StudyGroup, StudyGroupMember]:
+    return get_study_group_membership(db, user, group_id, [GROUP_STATUS_ACTIVE])
+
+
+def require_group_owner(db: Session, user: User, group_id: int) -> Tuple[StudyGroup, StudyGroupMember]:
+    group, membership = require_active_group_member(db, user, group_id)
+    if membership.role != GROUP_ROLE_OWNER or group.owner_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Study group owner permission required")
+    return group, membership
+
+
+def active_group_member_ids(db: Session, group_id: int) -> Set[int]:
+    rows = (
+        db.query(StudyGroupMember.user_id)
+        .filter(StudyGroupMember.group_id == group_id, StudyGroupMember.status == GROUP_STATUS_ACTIVE)
+        .all()
+    )
+    return {int(row[0]) for row in rows}
+
+
+def linked_group_wordbook_ids(db: Session, group_id: int, user_ids: Optional[Set[int]] = None) -> List[int]:
+    query = (
+        db.query(StudyGroupWordbook.wordbook_id)
+        .join(Wordbook, Wordbook.id == StudyGroupWordbook.wordbook_id)
+        .filter(
+            StudyGroupWordbook.group_id == group_id,
+            Wordbook.deleted_at.is_(None),
+            Wordbook.user_id == StudyGroupWordbook.added_by_user_id,
+        )
+    )
+    if user_ids is not None:
+        if not user_ids:
+            return []
+        query = query.filter(StudyGroupWordbook.added_by_user_id.in_(user_ids))
+    return [int(row[0]) for row in query.all()]
+
+
+def study_group_response(db: Session, group: StudyGroup, membership: StudyGroupMember) -> StudyGroupResponse:
+    member_count = (
+        db.query(func.count(StudyGroupMember.id))
+        .filter(StudyGroupMember.group_id == group.id, StudyGroupMember.status == GROUP_STATUS_ACTIVE)
+        .scalar()
+        or 0
+    )
+    linked_count = len(linked_group_wordbook_ids(db, group.id, active_group_member_ids(db, group.id)))
+    return StudyGroupResponse(
+        id=group.id,
+        name=group.name,
+        description=group.description,
+        owner_user_id=group.owner_user_id,
+        my_role=membership.role,
+        my_status=membership.status,
+        member_count=member_count,
+        linked_wordbook_count=linked_count,
+        created_at=group.created_at,
+        updated_at=group.updated_at,
+    )
+
+
+def group_progress_response(db: Session, group: StudyGroup, now: Optional[datetime] = None) -> StudyGroupProgressResponse:
+    now = now or utcnow()
+    member_ids = active_group_member_ids(db, group.id)
+    wordbook_ids = linked_group_wordbook_ids(db, group.id, member_ids)
+    if not member_ids or not wordbook_ids:
+        return StudyGroupProgressResponse(
+            group_id=group.id,
+            active_member_count=len(member_ids),
+            linked_wordbook_count=0,
+            due_count=0,
+            new_count=0,
+            weak_count=0,
+            mastered_count=0,
+            review_count_30d=0,
+            correct_count_30d=0,
+            recall_rate_30d=0,
+        )
+
+    base = (
+        db.query(Card, MemoryItem, ReviewState)
+        .join(MemoryItem, Card.item_id == MemoryItem.id)
+        .join(ReviewState, ReviewState.card_id == Card.id)
+        .filter(
+            Card.user_id.in_(member_ids),
+            Card.wordbook_id.in_(wordbook_ids),
+            Card.active.is_(True),
+            Card.deleted_at.is_(None),
+            MemoryItem.deleted_at.is_(None),
+            ReviewState.status != STATUS_SUSPENDED,
+        )
+    )
+    due_count = base.filter(ReviewState.due_at <= now, ReviewState.status != STATUS_NEW).count()
+    new_count = base.filter(ReviewState.status == STATUS_NEW).count()
+    weak_count = base.filter(or_(ReviewState.leech_score >= 3, ReviewState.lapses >= 2)).count()
+    mastered_count = (
+        base.filter(ReviewState.status == STATUS_MASTERED)
+        .with_entities(func.count(func.distinct(MemoryItem.id)))
+        .scalar()
+        or 0
+    )
+
+    cutoff = now - timedelta(days=30)
+    reviews = db.query(ReviewLog).filter(
+        ReviewLog.user_id.in_(member_ids),
+        ReviewLog.deck_id.in_(wordbook_ids),
+        ReviewLog.reviewed_at >= cutoff,
+    )
+    review_count = reviews.count()
+    correct_count = reviews.filter(ReviewLog.rating.in_([RATING_HARD, RATING_GOOD, RATING_EASY])).count()
+    recall_rate = correct_count / review_count if review_count else 0
+    return StudyGroupProgressResponse(
+        group_id=group.id,
+        active_member_count=len(member_ids),
+        linked_wordbook_count=len(wordbook_ids),
+        due_count=due_count,
+        new_count=new_count,
+        weak_count=weak_count,
+        mastered_count=mastered_count,
+        review_count_30d=review_count,
+        correct_count_30d=correct_count,
+        recall_rate_30d=recall_rate,
+    )
+
+
+def class_member_response(member: ClassMember) -> ClassMemberResponse:
+    return ClassMemberResponse(
+        user_id=member.user_id,
+        username=member.user.username,
+        role=member.role,
+        status=member.status,
+        joined_at=member.joined_at,
+    )
+
+
+def get_class_membership(
+    db: Session,
+    user: User,
+    class_id: int,
+    statuses: Optional[List[str]] = None,
+) -> Tuple[TeacherClass, ClassMember]:
+    query = (
+        db.query(TeacherClass, ClassMember)
+        .join(ClassMember, ClassMember.class_id == TeacherClass.id)
+        .filter(
+            TeacherClass.id == class_id,
+            TeacherClass.deleted_at.is_(None),
+            ClassMember.user_id == user.id,
+        )
+    )
+    if statuses is not None:
+        query = query.filter(ClassMember.status.in_(statuses))
+    row = query.first()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Class not found")
+    classroom, membership = row
+    return classroom, membership
+
+
+def require_active_class_member(db: Session, user: User, class_id: int) -> Tuple[TeacherClass, ClassMember]:
+    return get_class_membership(db, user, class_id, [GROUP_STATUS_ACTIVE])
+
+
+def require_class_teacher(db: Session, user: User, class_id: int) -> Tuple[TeacherClass, ClassMember]:
+    classroom, membership = require_active_class_member(db, user, class_id)
+    if membership.role != CLASS_ROLE_TEACHER or classroom.teacher_user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Class teacher permission required")
+    return classroom, membership
+
+
+def active_class_student_ids(db: Session, class_id: int) -> Set[int]:
+    rows = (
+        db.query(ClassMember.user_id)
+        .filter(
+            ClassMember.class_id == class_id,
+            ClassMember.role == CLASS_ROLE_STUDENT,
+            ClassMember.status == GROUP_STATUS_ACTIVE,
+        )
+        .all()
+    )
+    return {int(row[0]) for row in rows}
+
+
+def class_response(db: Session, classroom: TeacherClass, membership: ClassMember) -> ClassResponse:
+    student_count = (
+        db.query(func.count(ClassMember.id))
+        .filter(
+            ClassMember.class_id == classroom.id,
+            ClassMember.role == CLASS_ROLE_STUDENT,
+            ClassMember.status == GROUP_STATUS_ACTIVE,
+        )
+        .scalar()
+        or 0
+    )
+    assignment_count = (
+        db.query(func.count(ClassAssignment.id))
+        .filter(ClassAssignment.class_id == classroom.id, ClassAssignment.deleted_at.is_(None))
+        .scalar()
+        or 0
+    )
+    return ClassResponse(
+        id=classroom.id,
+        name=classroom.name,
+        description=classroom.description,
+        teacher_user_id=classroom.teacher_user_id,
+        my_role=membership.role,
+        my_status=membership.status,
+        student_count=student_count,
+        assignment_count=assignment_count,
+        created_at=classroom.created_at,
+        updated_at=classroom.updated_at,
+    )
+
+
+def class_assignment_response(assignment: ClassAssignment) -> ClassAssignmentResponse:
+    return ClassAssignmentResponse(
+        id=assignment.id,
+        class_id=assignment.class_id,
+        wordbook_id=assignment.wordbook_id,
+        title=assignment.title,
+        description=assignment.description,
+        due_at=assignment.due_at,
+        created_at=assignment.created_at,
+        updated_at=assignment.updated_at,
+    )
+
+
+def teacher_class_dashboard_response(
+    db: Session,
+    classroom: TeacherClass,
+    now: Optional[datetime] = None,
+) -> TeacherClassDashboardResponse:
+    now = now or utcnow()
+    student_ids = active_class_student_ids(db, classroom.id)
+    assignments = (
+        db.query(ClassAssignment)
+        .filter(ClassAssignment.class_id == classroom.id, ClassAssignment.deleted_at.is_(None))
+        .order_by(ClassAssignment.created_at.asc())
+        .all()
+    )
+    progress_rows: List[ClassAssignmentProgress] = []
+    cutoff = now - timedelta(days=30)
+    for assignment in assignments:
+        review_count = 0
+        correct_count = 0
+        if student_ids:
+            reviews = db.query(ReviewLog).filter(
+                ReviewLog.user_id.in_(student_ids),
+                ReviewLog.deck_id == assignment.wordbook_id,
+                ReviewLog.reviewed_at >= cutoff,
+            )
+            review_count = reviews.count()
+            correct_count = reviews.filter(ReviewLog.rating.in_([RATING_HARD, RATING_GOOD, RATING_EASY])).count()
+        recall_rate = correct_count / review_count if review_count else 0
+        progress_rows.append(
+            ClassAssignmentProgress(
+                assignment_id=assignment.id,
+                title=assignment.title,
+                assigned_count=len(student_ids),
+                review_count_30d=review_count,
+                correct_count_30d=correct_count,
+                recall_rate_30d=recall_rate,
+            )
+        )
+    return TeacherClassDashboardResponse(
+        class_id=classroom.id,
+        active_student_count=len(student_ids),
+        assignment_count=len(assignments),
+        assignments=progress_rows,
+    )
+
+
 def sync_legacy_word_after_review(db: Session, user: User, card: Card, rating: str, reviewed_at: datetime, create_learning_event: bool) -> Optional[Word]:
     item = card.memory_item
     if item is None or item.legacy_word_id is None:
@@ -248,6 +603,37 @@ def sync_conflict(entity_type: str, change: SyncChange, reason: str, server_enti
 def _payload_text(payload: Dict[str, Any], key: str) -> str:
     value = payload.get(key)
     return str(value).strip() if value is not None else ""
+
+
+def _payload_optional_text(payload: Dict[str, Any], *keys: str) -> Optional[str]:
+    for key in keys:
+        if key in payload:
+            value = payload.get(key)
+            if value is None:
+                return None
+            text = str(value).strip()
+            return text or None
+    return None
+
+
+def normalize_tags(tags: Optional[List[str]]) -> Optional[List[str]]:
+    if tags is None:
+        return None
+    normalized = [tag.strip() for tag in tags if tag and tag.strip()]
+    return normalized or None
+
+
+def _payload_tags(payload: Dict[str, Any], *keys: str) -> Optional[List[str]]:
+    for key in keys:
+        if key not in payload:
+            continue
+        value = payload.get(key)
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return normalize_tags([str(tag) for tag in value])
+        return normalize_tags(re.split(r"[,;]", str(value)))
+    return None
 
 
 def _payload_datetime(payload: Dict[str, Any], key: str) -> Optional[datetime]:
@@ -340,7 +726,18 @@ def apply_word_change(
         row = Word(wordbook_id=wordbook.id, key=key, value=value, last_viewed_at=_payload_datetime(change.payload, "lastViewedAt"))
         db.add(row)
         db.flush()
-        ensure_memory_item_for_word(db, user, row, str(change.payload.get("itemType") or change.payload.get("item_type") or "WORD"))
+        ensure_memory_item_for_word(
+            db,
+            user,
+            row,
+            str(change.payload.get("itemType") or change.payload.get("item_type") or "WORD"),
+            example_sentence=_payload_optional_text(change.payload, "exampleSentence", "example_sentence"),
+            update_example_sentence=True,
+            tags=_payload_tags(change.payload, "tags"),
+            update_tags=True,
+            cloze_text=_payload_optional_text(change.payload, "cloze", "clozeText", "cloze_text"),
+            update_cloze_text=True,
+        )
         mark_word_changed(db, user, row, "create")
         applied.append(SyncApplied(entity_type="word", entity_id=row.id, client_id=change.client_id, sync_revision=row.sync_revision))
         return
@@ -367,11 +764,20 @@ def apply_word_change(
         existing_word.value = value
     if "lastViewedAt" in change.payload:
         existing_word.last_viewed_at = _payload_datetime(change.payload, "lastViewedAt")
+    update_example_sentence = "exampleSentence" in change.payload or "example_sentence" in change.payload
+    update_tags = "tags" in change.payload
+    update_cloze_text = "cloze" in change.payload or "clozeText" in change.payload or "cloze_text" in change.payload
     ensure_memory_item_for_word(
         db,
         user,
         existing_word,
         str(change.payload.get("itemType") or change.payload.get("item_type") or (existing_word.memory_item.item_type if existing_word.memory_item else "WORD")),
+        example_sentence=_payload_optional_text(change.payload, "exampleSentence", "example_sentence"),
+        update_example_sentence=update_example_sentence,
+        tags=_payload_tags(change.payload, "tags"),
+        update_tags=update_tags,
+        cloze_text=_payload_optional_text(change.payload, "cloze", "clozeText", "cloze_text"),
+        update_cloze_text=update_cloze_text,
     )
     mark_word_changed(db, user, existing_word, "update")
     applied.append(SyncApplied(entity_type="word", entity_id=existing_word.id, client_id=change.client_id, sync_revision=existing_word.sync_revision))
@@ -451,6 +857,22 @@ def register_routes(api: FastAPI) -> None:
     def me(current_user: User = Depends(get_current_user)) -> UserResponse:
         return UserResponse.from_orm(current_user)
 
+    @api.get("/me/settings", response_model=UserSettingsResponse)
+    def me_settings(current_user: User = Depends(get_current_user)) -> UserSettingsResponse:
+        return UserSettingsResponse(fun_events_enabled=current_user.fun_events_enabled)
+
+    @api.patch("/me/settings", response_model=UserSettingsResponse)
+    def update_me_settings(
+        payload: UserSettingsUpdate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> UserSettingsResponse:
+        if payload.fun_events_enabled is not None:
+            current_user.fun_events_enabled = payload.fun_events_enabled
+        db.commit()
+        db.refresh(current_user)
+        return UserSettingsResponse(fun_events_enabled=current_user.fun_events_enabled)
+
     @api.get("/wordbooks", response_model=List[WordbookResponse])
     def list_wordbooks(
         current_user: User = Depends(get_current_user),
@@ -520,6 +942,391 @@ def register_routes(api: FastAPI) -> None:
         db.commit()
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    @api.post("/study-groups", response_model=StudyGroupResponse, status_code=status.HTTP_201_CREATED)
+    def create_study_group(
+        payload: StudyGroupCreate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> StudyGroupResponse:
+        now = utcnow()
+        group = StudyGroup(owner_user_id=current_user.id, name=payload.name, description=payload.description)
+        db.add(group)
+        try:
+            db.flush()
+            membership = StudyGroupMember(
+                group_id=group.id,
+                user_id=current_user.id,
+                role=GROUP_ROLE_OWNER,
+                status=GROUP_STATUS_ACTIVE,
+                joined_at=now,
+            )
+            db.add(membership)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Study group name already exists")
+        db.refresh(group)
+        db.refresh(membership)
+        return study_group_response(db, group, membership)
+
+    @api.get("/study-groups", response_model=List[StudyGroupResponse])
+    def list_study_groups(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> List[StudyGroupResponse]:
+        rows = (
+            db.query(StudyGroup, StudyGroupMember)
+            .join(StudyGroupMember, StudyGroupMember.group_id == StudyGroup.id)
+            .filter(
+                StudyGroup.deleted_at.is_(None),
+                StudyGroupMember.user_id == current_user.id,
+                StudyGroupMember.status.in_([GROUP_STATUS_ACTIVE, GROUP_STATUS_PENDING]),
+            )
+            .order_by(StudyGroup.updated_at.desc())
+            .all()
+        )
+        return [study_group_response(db, group, membership) for group, membership in rows]
+
+    @api.get("/study-groups/{group_id}", response_model=StudyGroupResponse)
+    def read_study_group(
+        group_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> StudyGroupResponse:
+        group, membership = get_study_group_membership(db, current_user, group_id, [GROUP_STATUS_ACTIVE, GROUP_STATUS_PENDING])
+        return study_group_response(db, group, membership)
+
+    @api.post("/study-groups/{group_id}/members", response_model=StudyGroupMemberResponse, status_code=status.HTTP_201_CREATED)
+    def invite_study_group_member(
+        group_id: int,
+        payload: StudyGroupInviteRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> StudyGroupMemberResponse:
+        require_group_owner(db, current_user, group_id)
+        target = db.query(User).filter(func.lower(User.username) == payload.username.lower()).first()
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        existing = (
+            db.query(StudyGroupMember)
+            .filter(StudyGroupMember.group_id == group_id, StudyGroupMember.user_id == target.id)
+            .first()
+        )
+        if existing is not None:
+            if existing.status == GROUP_STATUS_DECLINED:
+                existing.status = GROUP_STATUS_PENDING
+                existing.updated_at = utcnow()
+                db.commit()
+                db.refresh(existing)
+            return study_group_member_response(existing)
+
+        membership = StudyGroupMember(
+            group_id=group_id,
+            user_id=target.id,
+            role=GROUP_ROLE_MEMBER,
+            status=GROUP_STATUS_PENDING,
+        )
+        db.add(membership)
+        db.commit()
+        db.refresh(membership)
+        return study_group_member_response(membership)
+
+    @api.patch("/study-groups/{group_id}/members/me", response_model=StudyGroupMemberResponse)
+    def update_my_study_group_membership(
+        group_id: int,
+        payload: StudyGroupMembershipUpdate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> StudyGroupMemberResponse:
+        _group, membership = get_study_group_membership(
+            db,
+            current_user,
+            group_id,
+            [GROUP_STATUS_ACTIVE, GROUP_STATUS_PENDING, GROUP_STATUS_DECLINED],
+        )
+        if membership.role == GROUP_ROLE_OWNER and payload.status != GROUP_STATUS_ACTIVE:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group owner cannot decline membership")
+        membership.status = payload.status
+        membership.updated_at = utcnow()
+        if payload.status == GROUP_STATUS_ACTIVE and membership.joined_at is None:
+            membership.joined_at = utcnow()
+        db.commit()
+        db.refresh(membership)
+        return study_group_member_response(membership)
+
+    @api.delete("/study-groups/{group_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def remove_study_group_member(
+        group_id: int,
+        user_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> Response:
+        group, _membership = require_group_owner(db, current_user, group_id)
+        if user_id == group.owner_user_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Group owner cannot be removed")
+        row = db.query(StudyGroupMember).filter(StudyGroupMember.group_id == group_id, StudyGroupMember.user_id == user_id).first()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study group member not found")
+        db.delete(row)
+        db.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @api.post("/study-groups/{group_id}/wordbooks", response_model=StudyGroupWordbookResponse, status_code=status.HTTP_201_CREATED)
+    def link_study_group_wordbook(
+        group_id: int,
+        payload: StudyGroupWordbookLinkRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> StudyGroupWordbookResponse:
+        require_active_group_member(db, current_user, group_id)
+        wordbook = get_user_wordbook(db, current_user, payload.wordbook_id)
+        existing = (
+            db.query(StudyGroupWordbook)
+            .filter(StudyGroupWordbook.group_id == group_id, StudyGroupWordbook.wordbook_id == wordbook.id)
+            .first()
+        )
+        if existing is not None:
+            return StudyGroupWordbookResponse(
+                wordbook_id=wordbook.id,
+                name=wordbook.name,
+                owner_user_id=wordbook.user_id,
+                added_by_user_id=existing.added_by_user_id,
+                created_at=existing.created_at,
+            )
+        link = StudyGroupWordbook(group_id=group_id, wordbook_id=wordbook.id, added_by_user_id=current_user.id)
+        db.add(link)
+        db.commit()
+        db.refresh(link)
+        return StudyGroupWordbookResponse(
+            wordbook_id=wordbook.id,
+            name=wordbook.name,
+            owner_user_id=wordbook.user_id,
+            added_by_user_id=link.added_by_user_id,
+            created_at=link.created_at,
+        )
+
+    @api.get("/study-groups/{group_id}/progress", response_model=StudyGroupProgressResponse)
+    def study_group_progress(
+        group_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> StudyGroupProgressResponse:
+        group, _membership = require_active_group_member(db, current_user, group_id)
+        return group_progress_response(db, group)
+
+    @api.get("/study-groups/{group_id}/weak-cards", response_model=TodayStudyResponse)
+    def study_group_weak_cards(
+        group_id: int,
+        limit: int = 20,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> TodayStudyResponse:
+        require_active_group_member(db, current_user, group_id)
+        wordbook_ids = linked_group_wordbook_ids(db, group_id, {current_user.id})
+        if not wordbook_ids:
+            return TodayStudyResponse(
+                summary=TodayStudySummary(due_count=0, new_count=0, weak_count=0, estimated_minutes=0),
+                cards=[],
+            )
+        backfill_review_models(db, current_user)
+        db.flush()
+        weak_since = utcnow() - timedelta(days=7)
+        weak_card_ids = {
+            row.card_id
+            for row in db.query(ReviewLog.card_id)
+            .filter(
+                ReviewLog.user_id == current_user.id,
+                ReviewLog.deck_id.in_(wordbook_ids),
+                ReviewLog.rating == RATING_AGAIN,
+                ReviewLog.reviewed_at >= weak_since,
+            )
+            .all()
+        }
+        rows = today_cards_query(db, current_user).filter(Card.wordbook_id.in_(wordbook_ids)).all()
+        weak_rows = [
+            row
+            for row in rows
+            if (row[2].lapses or 0) > 0
+            or (row[2].leech_score or 0) > 0
+            or row[0].id in weak_card_ids
+        ]
+        ordered_rows = order_today_rows(weak_rows)[: max(1, min(limit, 100))]
+        now = utcnow()
+        due_count = len(
+            [
+                row
+                for row in rows
+                if comparable_datetime(row[2].due_at, datetime.max, now) <= now and row[2].status != STATUS_NEW
+            ]
+        )
+        new_count = len([row for row in rows if row[2].status == STATUS_NEW])
+        weak_count = len(weak_rows)
+        return TodayStudyResponse(
+            summary=TodayStudySummary(
+                due_count=due_count,
+                new_count=new_count,
+                weak_count=weak_count,
+                estimated_minutes=max(1, min(len(ordered_rows), 20)) if ordered_rows else 0,
+            ),
+            cards=[today_card_response(card, item, state) for card, item, state in ordered_rows],
+        )
+
+    @api.post("/classes", response_model=ClassResponse, status_code=status.HTTP_201_CREATED)
+    def create_class(
+        payload: ClassCreate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> ClassResponse:
+        now = utcnow()
+        classroom = TeacherClass(teacher_user_id=current_user.id, name=payload.name, description=payload.description)
+        db.add(classroom)
+        try:
+            db.flush()
+            membership = ClassMember(
+                class_id=classroom.id,
+                user_id=current_user.id,
+                role=CLASS_ROLE_TEACHER,
+                status=GROUP_STATUS_ACTIVE,
+                joined_at=now,
+            )
+            db.add(membership)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Class name already exists")
+        db.refresh(classroom)
+        db.refresh(membership)
+        return class_response(db, classroom, membership)
+
+    @api.get("/classes", response_model=List[ClassResponse])
+    def list_classes(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> List[ClassResponse]:
+        rows = (
+            db.query(TeacherClass, ClassMember)
+            .join(ClassMember, ClassMember.class_id == TeacherClass.id)
+            .filter(
+                TeacherClass.deleted_at.is_(None),
+                ClassMember.user_id == current_user.id,
+                ClassMember.status.in_([GROUP_STATUS_ACTIVE, GROUP_STATUS_PENDING]),
+            )
+            .order_by(TeacherClass.updated_at.desc())
+            .all()
+        )
+        return [class_response(db, classroom, membership) for classroom, membership in rows]
+
+    @api.get("/classes/{class_id}", response_model=ClassResponse)
+    def read_class(
+        class_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> ClassResponse:
+        classroom, membership = get_class_membership(db, current_user, class_id, [GROUP_STATUS_ACTIVE, GROUP_STATUS_PENDING])
+        return class_response(db, classroom, membership)
+
+    @api.post("/classes/{class_id}/members", response_model=ClassMemberResponse, status_code=status.HTTP_201_CREATED)
+    def invite_class_member(
+        class_id: int,
+        payload: ClassInviteRequest,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> ClassMemberResponse:
+        classroom, _membership = require_class_teacher(db, current_user, class_id)
+        target = db.query(User).filter(func.lower(User.username) == payload.username.lower()).first()
+        if target is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        existing = db.query(ClassMember).filter(ClassMember.class_id == class_id, ClassMember.user_id == target.id).first()
+        if existing is not None:
+            if existing.status == GROUP_STATUS_DECLINED:
+                existing.status = GROUP_STATUS_PENDING
+                existing.updated_at = utcnow()
+                classroom.updated_at = utcnow()
+                db.commit()
+                db.refresh(existing)
+            return class_member_response(existing)
+        membership = ClassMember(
+            class_id=class_id,
+            user_id=target.id,
+            role=CLASS_ROLE_STUDENT,
+            status=GROUP_STATUS_PENDING,
+        )
+        classroom.updated_at = utcnow()
+        db.add(membership)
+        db.commit()
+        db.refresh(membership)
+        return class_member_response(membership)
+
+    @api.patch("/classes/{class_id}/members/me", response_model=ClassMemberResponse)
+    def update_my_class_membership(
+        class_id: int,
+        payload: ClassMembershipUpdate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> ClassMemberResponse:
+        _classroom, membership = get_class_membership(
+            db,
+            current_user,
+            class_id,
+            [GROUP_STATUS_ACTIVE, GROUP_STATUS_PENDING, GROUP_STATUS_DECLINED],
+        )
+        if membership.role == CLASS_ROLE_TEACHER and payload.status != GROUP_STATUS_ACTIVE:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Class teacher cannot decline membership")
+        membership.status = payload.status
+        membership.updated_at = utcnow()
+        if payload.status == GROUP_STATUS_ACTIVE and membership.joined_at is None:
+            membership.joined_at = utcnow()
+        db.commit()
+        db.refresh(membership)
+        return class_member_response(membership)
+
+    @api.post("/classes/{class_id}/assignments", response_model=ClassAssignmentResponse, status_code=status.HTTP_201_CREATED)
+    def create_class_assignment(
+        class_id: int,
+        payload: ClassAssignmentCreate,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> ClassAssignmentResponse:
+        classroom, _membership = require_class_teacher(db, current_user, class_id)
+        wordbook = get_user_wordbook(db, current_user, payload.wordbook_id)
+        assignment = ClassAssignment(
+            class_id=class_id,
+            wordbook_id=wordbook.id,
+            created_by_user_id=current_user.id,
+            title=payload.title or wordbook.name,
+            description=payload.description,
+            due_at=payload.due_at,
+        )
+        classroom.updated_at = utcnow()
+        db.add(assignment)
+        db.commit()
+        db.refresh(assignment)
+        return class_assignment_response(assignment)
+
+    @api.get("/classes/{class_id}/assignments", response_model=List[ClassAssignmentResponse])
+    def list_class_assignments(
+        class_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> List[ClassAssignmentResponse]:
+        require_active_class_member(db, current_user, class_id)
+        rows = (
+            db.query(ClassAssignment)
+            .filter(ClassAssignment.class_id == class_id, ClassAssignment.deleted_at.is_(None))
+            .order_by(ClassAssignment.created_at.asc())
+            .all()
+        )
+        return [class_assignment_response(row) for row in rows]
+
+    @api.get("/classes/{class_id}/dashboard", response_model=TeacherClassDashboardResponse)
+    def teacher_class_dashboard(
+        class_id: int,
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> TeacherClassDashboardResponse:
+        classroom, _membership = require_class_teacher(db, current_user, class_id)
+        return teacher_class_dashboard_response(db, classroom)
+
     @api.get("/wordbooks/{wordbook_id}/words", response_model=List[WordResponse])
     def list_words(
         wordbook_id: int,
@@ -542,7 +1349,18 @@ def register_routes(api: FastAPI) -> None:
         db.add(row)
         try:
             db.flush()
-            ensure_memory_item_for_word(db, current_user, row, payload.item_type or "WORD")
+            ensure_memory_item_for_word(
+                db,
+                current_user,
+                row,
+                payload.item_type or "WORD",
+                example_sentence=payload.example_sentence,
+                update_example_sentence=True,
+                tags=normalize_tags(payload.tags),
+                update_tags=True,
+                cloze_text=payload.cloze_text,
+                update_cloze_text=True,
+            )
             mark_word_changed(db, current_user, row, "create")
             db.commit()
         except IntegrityError:
@@ -574,13 +1392,35 @@ def register_routes(api: FastAPI) -> None:
                 row = Word(wordbook_id=wordbook_id, key=item.key, value=item.value, last_viewed_at=item.last_viewed_at)
                 db.add(row)
                 db.flush()
-                ensure_memory_item_for_word(db, current_user, row, item.item_type or "WORD")
+                ensure_memory_item_for_word(
+                    db,
+                    current_user,
+                    row,
+                    item.item_type or "WORD",
+                    example_sentence=item.example_sentence,
+                    update_example_sentence=True,
+                    tags=normalize_tags(item.tags),
+                    update_tags=True,
+                    cloze_text=item.cloze_text,
+                    update_cloze_text=True,
+                )
                 mark_word_changed(db, current_user, row, "create")
             else:
                 row.key = item.key
                 row.value = item.value
                 row.last_viewed_at = item.last_viewed_at
-                ensure_memory_item_for_word(db, current_user, row, item.item_type or (row.memory_item.item_type if row.memory_item else "WORD"))
+                ensure_memory_item_for_word(
+                    db,
+                    current_user,
+                    row,
+                    item.item_type or (row.memory_item.item_type if row.memory_item else "WORD"),
+                    example_sentence=item.example_sentence,
+                    update_example_sentence="example_sentence" in item.__fields_set__,
+                    tags=normalize_tags(item.tags),
+                    update_tags="tags" in item.__fields_set__,
+                    cloze_text=item.cloze_text,
+                    update_cloze_text="cloze_text" in item.__fields_set__,
+                )
                 mark_word_changed(db, current_user, row, "update")
             changed.append(row)
 
@@ -612,12 +1452,26 @@ def register_routes(api: FastAPI) -> None:
     ) -> WordResponse:
         row = get_user_word(db, current_user, word_id)
         item_type = payload.item_type
+        update_example_sentence = "example_sentence" in payload.__fields_set__
+        update_tags = "tags" in payload.__fields_set__
+        update_cloze_text = "cloze_text" in payload.__fields_set__
         for field, value in payload.dict(by_alias=False, exclude_unset=True).items():
-            if field == "item_type":
+            if field in {"item_type", "example_sentence", "tags", "cloze_text"}:
                 continue
             setattr(row, field, value)
         try:
-            ensure_memory_item_for_word(db, current_user, row, item_type or (row.memory_item.item_type if row.memory_item else "WORD"))
+            ensure_memory_item_for_word(
+                db,
+                current_user,
+                row,
+                item_type or (row.memory_item.item_type if row.memory_item else "WORD"),
+                example_sentence=payload.example_sentence,
+                update_example_sentence=update_example_sentence,
+                tags=normalize_tags(payload.tags),
+                update_tags=update_tags,
+                cloze_text=payload.cloze_text,
+                update_cloze_text=update_cloze_text,
+            )
             mark_word_changed(db, current_user, row, "update")
             db.commit()
         except IntegrityError:
@@ -847,6 +1701,7 @@ def register_routes(api: FastAPI) -> None:
         summaries = recent_wordbook_summaries(db, current_user.id)
         memorized_words = merged_memorized_word_summaries(db, current_user.id)
         memorized_word_count = len(memorized_words)
+        long_term_stats = profile_long_term_review_stats_30d(db, current_user.id)
         return ProfileSummary(
             cumulative_learning_days=cumulative_days,
             today_studied_count=today_count,
@@ -855,6 +1710,11 @@ def register_routes(api: FastAPI) -> None:
             recent_wordbooks=summaries,
             mastered_count=profile_mastered_count(db, current_user.id),
             weak_card_count=profile_weak_card_count(db, current_user.id),
+            long_term_review_count_30d=long_term_stats["review_count"],
+            long_term_correct_count_30d=long_term_stats["correct_count"],
+            long_term_recall_rate_30d=long_term_stats["recall_rate"],
+            mastered_lapse_count_30d=long_term_stats["lapse_count"],
+            old_mastered_due_count=profile_old_mastered_due_count(db, current_user.id),
         )
 
 
@@ -919,16 +1779,16 @@ def merged_memorized_word_summaries(db: Session, user_id: int) -> List[Memorized
         )
         .all()
     )
-    for row in review_rows:
-        key = dedup_key(row.item_id, row.word_id, row.card_id)
+    for item_id, word_id, card_id, wordbook_id, wordbook_name, prompt, answer in review_rows:
+        key = dedup_key(item_id, word_id, card_id)
         if key in merged:
             continue
         merged[key] = MemorizedWordSummary(
-            word_id=row.word_id if row.word_id is not None else -row.card_id,
-            wordbook_id=row.wordbook_id,
-            wordbook_name=row.name,
-            key=row.prompt,
-            value=row.answer,
+            word_id=word_id if word_id is not None else -card_id,
+            wordbook_id=wordbook_id,
+            wordbook_name=wordbook_name,
+            key=prompt,
+            value=answer,
             known_count=1,
             last_studied_at=None,
         )
@@ -936,14 +1796,20 @@ def merged_memorized_word_summaries(db: Session, user_id: int) -> List[Memorized
 
 
 def profile_mastered_count(db: Session, user_id: int) -> int:
-    mastered = (
+    return (
         db.query(func.count(func.distinct(Card.item_id)))
         .join(ReviewState, ReviewState.card_id == Card.id)
-        .filter(ReviewState.user_id == user_id, ReviewState.status == STATUS_MASTERED)
+        .join(MemoryItem, MemoryItem.id == Card.item_id)
+        .filter(
+            ReviewState.user_id == user_id,
+            ReviewState.status == STATUS_MASTERED,
+            Card.active.is_(True),
+            Card.deleted_at.is_(None),
+            MemoryItem.deleted_at.is_(None),
+        )
         .scalar()
         or 0
     )
-    return mastered if mastered > 0 else memorized_word_total(db, user_id)
 
 
 def profile_weak_card_count(db: Session, user_id: int) -> int:
@@ -954,6 +1820,61 @@ def profile_weak_card_count(db: Session, user_id: int) -> int:
         .scalar()
         or 0
     )
+
+
+def profile_long_term_review_stats_30d(db: Session, user_id: int, now: Optional[datetime] = None) -> Dict[str, Any]:
+    reference = now or utcnow()
+    since = reference - timedelta(days=30)
+    rows = (
+        db.query(ReviewLog, ReviewState)
+        .outerjoin(ReviewState, ReviewState.card_id == ReviewLog.card_id)
+        .filter(ReviewLog.user_id == user_id, ReviewLog.reviewed_at >= since)
+        .all()
+    )
+    long_term_logs = [log for log, state in rows if review_log_was_mastered_before(log, state)]
+    review_count = len(long_term_logs)
+    correct_count = sum(1 for log in long_term_logs if log.rating in {RATING_HARD, RATING_GOOD, RATING_EASY})
+    lapse_count = sum(1 for log in long_term_logs if log.rating == RATING_AGAIN)
+    return {
+        "review_count": review_count,
+        "correct_count": correct_count,
+        "recall_rate": correct_count / review_count if review_count else 0.0,
+        "lapse_count": lapse_count,
+    }
+
+
+def review_log_was_mastered_before(log: ReviewLog, state: Optional[ReviewState]) -> bool:
+    before = log.state_before_json if isinstance(log.state_before_json, dict) else None
+    before_status = before.get("status") if before else None
+    if before_status is not None:
+        return before_status == STATUS_MASTERED
+    return state is not None and state.status == STATUS_MASTERED
+
+
+def profile_old_mastered_due_count(db: Session, user_id: int, now: Optional[datetime] = None) -> int:
+    reference = now or utcnow()
+    recent_cutoff = reference - timedelta(days=7)
+    rows = (
+        db.query(Card, ReviewState)
+        .join(MemoryItem, MemoryItem.id == Card.item_id)
+        .join(ReviewState, ReviewState.card_id == Card.id)
+        .filter(
+            Card.user_id == user_id,
+            Card.active.is_(True),
+            Card.deleted_at.is_(None),
+            MemoryItem.deleted_at.is_(None),
+            ReviewState.status == STATUS_MASTERED,
+        )
+        .all()
+    )
+    count = 0
+    for _card, state in rows:
+        if state.due_at and comparable_datetime(state.due_at, datetime.max, reference) <= reference:
+            continue
+        if state.last_reviewed_at and comparable_datetime(state.last_reviewed_at, datetime.max, reference) >= recent_cutoff:
+            continue
+        count += 1
+    return count
 
 
 def logout_current_token(authorization: str, current_user: User, db: Session) -> MessageResponse:

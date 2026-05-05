@@ -182,6 +182,11 @@ def test_study_updates_progress_and_profile(client, auth_headers):
     assert summary["memorizedWords"][0]["knownCount"] == 1
     assert "masteredCount" in summary
     assert "weakCardCount" in summary
+    assert summary["longTermReviewCount30d"] == 0
+    assert summary["longTermCorrectCount30d"] == 0
+    assert summary["longTermRecallRate30d"] == 0
+    assert summary["masteredLapseCount30d"] == 0
+    assert summary["oldMasteredDueCount"] == 0
 
 
 def test_profile_summary_merges_legacy_and_review_dedup(client, auth_headers):
@@ -203,6 +208,81 @@ def test_profile_summary_merges_legacy_and_review_dedup(client, auth_headers):
     assert summary["todayStudiedCount"] == 1
     assert summary["cumulativeLearningDays"] >= 1
     assert summary["memorizedWordCount"] == 1
+
+
+def test_profile_summary_long_term_memory_stats(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import Card, MemoryItem, ReviewLog, User
+    from app.security import utcnow
+
+    wb = client.post("/wordbooks", json={"name": "Long term"}, headers=auth_headers).json()
+    for payload in [
+        {"key": "duplicate", "value": "D"},
+        {"key": "eligible", "value": "E", "itemType": "QA"},
+        {"key": "recent", "value": "R", "itemType": "QA"},
+        {"key": "inactive", "value": "I", "itemType": "QA"},
+        {"key": "deleted", "value": "X", "itemType": "QA"},
+        {"key": "due", "value": "Due", "itemType": "QA"},
+    ]:
+        client.post(f"/wordbooks/{wb['id']}/words", json=payload, headers=auth_headers)
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "theo").one()
+        items = {item.key: item for item in db.query(MemoryItem).filter(MemoryItem.wordbook_id == wb["id"]).all()}
+        now = utcnow()
+
+        def mark_mastered(card: Card, *, last_reviewed_days_ago: int, due_in_days: int) -> None:
+            state = card.review_state
+            state.status = "MASTERED"
+            state.last_reviewed_at = now - timedelta(days=last_reviewed_days_ago)
+            state.mastered_at = now - timedelta(days=40)
+            state.due_at = now + timedelta(days=due_in_days)
+
+        for card in items["duplicate"].cards:
+            mark_mastered(card, last_reviewed_days_ago=3, due_in_days=30)
+        eligible_card = items["eligible"].cards[0]
+        mark_mastered(eligible_card, last_reviewed_days_ago=20, due_in_days=30)
+        mark_mastered(items["recent"].cards[0], last_reviewed_days_ago=3, due_in_days=30)
+        mark_mastered(items["inactive"].cards[0], last_reviewed_days_ago=20, due_in_days=30)
+        items["inactive"].cards[0].active = False
+        mark_mastered(items["deleted"].cards[0], last_reviewed_days_ago=20, due_in_days=30)
+        items["deleted"].deleted_at = now
+        mark_mastered(items["due"].cards[0], last_reviewed_days_ago=20, due_in_days=-1)
+
+        def add_review_log(rating: str, state_before: str, days_ago: int, client_event_id: str) -> None:
+            db.add(
+                ReviewLog(
+                    user_id=user.id,
+                    card_id=eligible_card.id,
+                    deck_id=wb["id"],
+                    rating=rating,
+                    is_correct=rating != "AGAIN",
+                    reviewed_at=now - timedelta(days=days_ago),
+                    platform="WEB",
+                    state_before_json={"status": state_before},
+                    state_after_json={"status": "MASTERED"},
+                    client_event_id=client_event_id,
+                )
+            )
+
+        add_review_log("HARD", "MASTERED", 1, "long-hard")
+        add_review_log("GOOD", "MASTERED", 2, "long-good")
+        add_review_log("EASY", "MASTERED", 3, "long-easy")
+        add_review_log("AGAIN", "MASTERED", 4, "long-again")
+        add_review_log("GOOD", "REVIEW", 5, "not-long-review")
+        add_review_log("GOOD", "MASTERED", 31, "old-long-review")
+        db.commit()
+    finally:
+        db.close()
+
+    summary = client.get("/profile/summary", headers=auth_headers).json()
+    assert summary["masteredCount"] == 4
+    assert summary["longTermReviewCount30d"] == 4
+    assert summary["longTermCorrectCount30d"] == 3
+    assert summary["masteredLapseCount30d"] == 1
+    assert summary["longTermRecallRate30d"] == 0.75
+    assert summary["oldMasteredDueCount"] == 1
 
 
 def test_item_type_controls_default_card_generation(client, auth_headers):
@@ -250,6 +330,94 @@ def test_item_type_controls_default_card_generation(client, auth_headers):
     assert cards_by_type["QA"] == ["BASIC_KEY_TO_VALUE"]
     assert cards_by_type["COMMAND"] == ["BASIC_KEY_TO_VALUE"]
     assert cards_by_type["SENTENCE"] == []
+
+
+def test_example_sentence_generates_cloze_typing_and_stores_response_text(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import Card, MemoryItem, ReviewLog
+
+    wordbook_id = client.post("/wordbooks", json={"name": "Sentence cards"}, headers=auth_headers).json()["id"]
+    word = client.post(
+        f"/wordbooks/{wordbook_id}/words",
+        json={
+            "key": "retain",
+            "value": "유지하다",
+            "exampleSentence": "I retain important details.",
+            "tags": ["memory", "verb"],
+            "cloze": "I {{c1::retain}} important details.",
+        },
+        headers=auth_headers,
+    ).json()
+    assert word["exampleSentence"] == "I retain important details."
+    assert word["tags"] == ["memory", "verb"]
+    assert word["cloze"] == "I {{c1::retain}} important details."
+
+    today = client.get(f"/study/today?wordbookId={wordbook_id}&limit=10", headers=auth_headers).json()
+    cards_by_type = {card["cardType"]: card for card in today["cards"]}
+    assert set(cards_by_type) == {"BASIC_KEY_TO_VALUE", "BASIC_VALUE_TO_KEY", "CLOZE", "TYPING"}
+    assert cards_by_type["CLOZE"]["prompt"] == "I ____ important details."
+    assert cards_by_type["CLOZE"]["answer"] == "retain"
+    assert cards_by_type["TYPING"]["prompt"] == "I retain important details."
+    assert cards_by_type["TYPING"]["answer"] == "retain"
+
+    reviewed = client.post(
+        f"/study/cards/{cards_by_type['TYPING']['cardId']}/review",
+        json={"rating": "GOOD", "platform": "WEB", "responseText": "retain", "clientEventId": "typing-response"},
+        headers=auth_headers,
+    )
+    assert reviewed.status_code == 200
+
+    patched = client.patch(f"/words/{word['id']}", json={"exampleSentence": None, "cloze": None}, headers=auth_headers).json()
+    assert patched["exampleSentence"] is None
+    assert patched["cloze"] is None
+
+    db = SessionLocal()
+    try:
+        item = db.query(MemoryItem).filter(MemoryItem.legacy_word_id == word["id"]).one()
+        assert item.example_sentence is None
+        assert item.cloze_text is None
+        assert item.tags == ["memory", "verb"]
+        assert db.query(ReviewLog).filter(ReviewLog.client_event_id == "typing-response").one().response_text == "retain"
+        assert db.query(Card).filter(Card.item_id == item.id, Card.card_type == "CLOZE").one().metadata_json == {"source": "cloze", "answer": "retain"}
+        inactive_sentence_cards = (
+            db.query(Card)
+            .filter(Card.item_id == item.id, Card.card_type.in_(["CLOZE", "TYPING"]), Card.active.is_(False))
+            .count()
+        )
+        assert inactive_sentence_cards == 2
+    finally:
+        db.close()
+
+
+def test_course_pack_content_tables_are_separate_from_review_state(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import CourseLesson, CourseLessonItem, CoursePack, CourseUnit, ReviewState
+
+    db = SessionLocal()
+    try:
+        pack = CoursePack(slug="travel-a1", title="Travel A1", description="Starter travel course")
+        unit = CourseUnit(course_pack=pack, position=1, title="Airport")
+        lesson = CourseLesson(unit=unit, position=1, title="Passport")
+        lesson_item = CourseLessonItem(
+            lesson=lesson,
+            position=1,
+            key="passport",
+            value="여권",
+            item_type="WORD",
+            example_sentence="I lost my passport.",
+            cloze_text="I lost my {{c1::passport}}.",
+            tags=["travel", "airport"],
+        )
+        db.add_all([pack, unit, lesson, lesson_item])
+        db.commit()
+
+        stored = db.query(CourseLessonItem).filter(CourseLessonItem.key == "passport").one()
+        assert stored.tags == ["travel", "airport"]
+        assert "user_id" not in CoursePack.__table__.columns
+        assert "review_state_id" not in CourseLessonItem.__table__.columns
+        assert db.query(ReviewState).count() == 0
+    finally:
+        db.close()
 
 
 def test_study_today_returns_summary_filters_wordbook_and_spreads_related_cards(client, auth_headers):
@@ -311,6 +479,238 @@ def test_card_review_idempotency_mistakes_and_conservative_mastered(client, auth
     assert any(row["cardId"] == card["cardId"] for row in mistakes.json()["cards"])
 
 
+def test_study_events_generate_after_review_and_respect_settings(client, auth_headers):
+    from app.database import SessionLocal
+    from app.models import Card, ReviewState, StudyEvent
+
+    wordbook_id = client.post("/wordbooks", json={"name": "Events"}, headers=auth_headers).json()["id"]
+    client.post(f"/wordbooks/{wordbook_id}/words", json={"key": "old", "value": "오래된"}, headers=auth_headers)
+    first_card = client.get(f"/study/today?wordbookId={wordbook_id}&limit=1", headers=auth_headers).json()["cards"][0]
+
+    db = SessionLocal()
+    try:
+        state = db.query(ReviewState).join(Card, Card.id == ReviewState.card_id).filter(Card.id == first_card["cardId"]).one()
+        state.status = "MASTERED"
+        state.leech_score = 2
+        db.commit()
+    finally:
+        db.close()
+
+    reviewed = client.post(
+        f"/study/cards/{first_card['cardId']}/review",
+        json={"rating": "AGAIN", "platform": "WEB", "clientEventId": "event-lapse"},
+        headers=auth_headers,
+    )
+    assert reviewed.status_code == 200
+
+    db = SessionLocal()
+    try:
+        event_types = {event.event_type for event in db.query(StudyEvent).all()}
+        assert {"MASTERED_LAPSE", "LEECH"}.issubset(event_types)
+        event_count = db.query(StudyEvent).count()
+    finally:
+        db.close()
+
+    settings = client.patch("/me/settings", json={"funEventsEnabled": False}, headers=auth_headers)
+    assert settings.status_code == 200
+    assert settings.json()["funEventsEnabled"] is False
+
+    client.post(f"/wordbooks/{wordbook_id}/words", json={"key": "quiet", "value": "조용한"}, headers=auth_headers)
+    cards = client.get(f"/study/today?wordbookId={wordbook_id}&limit=10", headers=auth_headers).json()["cards"]
+    second_card = next(card for card in cards if card["prompt"] == "quiet")
+    db = SessionLocal()
+    try:
+        state = db.query(ReviewState).join(Card, Card.id == ReviewState.card_id).filter(Card.id == second_card["cardId"]).one()
+        state.status = "MASTERED"
+        state.leech_score = 2
+        db.commit()
+    finally:
+        db.close()
+
+    client.post(
+        f"/study/cards/{second_card['cardId']}/review",
+        json={"rating": "AGAIN", "platform": "WEB", "clientEventId": "event-disabled"},
+        headers=auth_headers,
+    )
+    db = SessionLocal()
+    try:
+        assert db.query(StudyEvent).count() == event_count
+    finally:
+        db.close()
+
+
+def test_study_groups_permissions_progress_and_weak_cards(client, auth_headers):
+    owner_headers = auth_headers
+    member_token = client.post("/auth/register", json={"username": "member", "password": "password123"}).json()["token"]
+    member_headers = {"Authorization": f"Bearer {member_token}"}
+    outsider_token = client.post("/auth/register", json={"username": "outsider", "password": "password123"}).json()["token"]
+    outsider_headers = {"Authorization": f"Bearer {outsider_token}"}
+
+    owner_wordbook = client.post("/wordbooks", json={"name": "Owner Deck"}, headers=owner_headers).json()
+    client.post(
+        f"/wordbooks/{owner_wordbook['id']}/words",
+        json={"key": "alpha", "value": "owner answer"},
+        headers=owner_headers,
+    )
+    owner_card = client.get(f"/study/today?wordbookId={owner_wordbook['id']}&limit=10", headers=owner_headers).json()["cards"][0]
+    client.post(
+        f"/study/cards/{owner_card['cardId']}/review",
+        json={"rating": "AGAIN", "clientEventId": "group-owner-again"},
+        headers=owner_headers,
+    )
+
+    group = client.post("/study-groups", json={"name": "Team"}, headers=owner_headers)
+    assert group.status_code == 201
+    group_id = group.json()["id"]
+    linked_owner = client.post(
+        f"/study-groups/{group_id}/wordbooks",
+        json={"wordbookId": owner_wordbook["id"]},
+        headers=owner_headers,
+    )
+    assert linked_owner.status_code == 201
+
+    assert client.get(f"/study-groups/{group_id}", headers=outsider_headers).status_code == 404
+    assert client.get(f"/study-groups/{group_id}/progress", headers=outsider_headers).status_code == 404
+
+    invite = client.post(f"/study-groups/{group_id}/members", json={"username": "member"}, headers=owner_headers)
+    assert invite.status_code == 201
+    assert invite.json()["status"] == "PENDING"
+    listed_for_member = client.get("/study-groups", headers=member_headers)
+    assert listed_for_member.status_code == 200
+    assert listed_for_member.json()[0]["myStatus"] == "PENDING"
+    assert client.get(f"/study-groups/{group_id}/progress", headers=member_headers).status_code == 404
+    assert (
+        client.post(
+            f"/study-groups/{group_id}/wordbooks",
+            json={"wordbookId": owner_wordbook["id"]},
+            headers=member_headers,
+        ).status_code
+        == 404
+    )
+
+    accepted = client.patch(f"/study-groups/{group_id}/members/me", json={"status": "ACTIVE"}, headers=member_headers)
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "ACTIVE"
+
+    member_wordbook = client.post("/wordbooks", json={"name": "Member Deck"}, headers=member_headers).json()
+    client.post(
+        f"/wordbooks/{member_wordbook['id']}/words",
+        json={"key": "beta", "value": "member answer"},
+        headers=member_headers,
+    )
+    member_card = client.get(f"/study/today?wordbookId={member_wordbook['id']}&limit=10", headers=member_headers).json()["cards"][0]
+    client.post(
+        f"/study/cards/{member_card['cardId']}/review",
+        json={"rating": "GOOD", "clientEventId": "group-member-good"},
+        headers=member_headers,
+    )
+    linked_member = client.post(
+        f"/study-groups/{group_id}/wordbooks",
+        json={"wordbookId": member_wordbook["id"]},
+        headers=member_headers,
+    )
+    assert linked_member.status_code == 201
+
+    progress = client.get(f"/study-groups/{group_id}/progress", headers=owner_headers)
+    assert progress.status_code == 200
+    progress_body = progress.json()
+    assert progress_body["activeMemberCount"] == 2
+    assert progress_body["linkedWordbookCount"] == 2
+    assert progress_body["reviewCount30d"] == 2
+    assert progress_body["correctCount30d"] == 1
+    assert progress_body["recallRate30d"] == 0.5
+
+    owner_weak = client.get(f"/study-groups/{group_id}/weak-cards", headers=owner_headers)
+    assert owner_weak.status_code == 200
+    assert any(card["prompt"] == "alpha" for card in owner_weak.json()["cards"])
+    assert all(card["prompt"] != "beta" for card in owner_weak.json()["cards"])
+
+    member_weak = client.get(f"/study-groups/{group_id}/weak-cards", headers=member_headers)
+    assert member_weak.status_code == 200
+    assert all(card["prompt"] != "alpha" for card in member_weak.json()["cards"])
+
+    non_owner_invite = client.post(f"/study-groups/{group_id}/members", json={"username": "outsider"}, headers=member_headers)
+    assert non_owner_invite.status_code == 403
+
+
+def test_teacher_classes_assignments_and_dashboard_permissions(client, auth_headers):
+    teacher_headers = auth_headers
+    student_token = client.post("/auth/register", json={"username": "student", "password": "password123"}).json()["token"]
+    student_headers = {"Authorization": f"Bearer {student_token}"}
+    outsider_token = client.post("/auth/register", json={"username": "class-outsider", "password": "password123"}).json()["token"]
+    outsider_headers = {"Authorization": f"Bearer {outsider_token}"}
+
+    teacher_wordbook = client.post("/wordbooks", json={"name": "Lesson 1"}, headers=teacher_headers).json()
+    client.post(
+        f"/wordbooks/{teacher_wordbook['id']}/words",
+        json={"key": "teacher", "value": "content"},
+        headers=teacher_headers,
+    )
+    student_wordbook = client.post("/wordbooks", json={"name": "Private Student"}, headers=student_headers).json()
+
+    classroom = client.post("/classes", json={"name": "Morning Class"}, headers=teacher_headers)
+    assert classroom.status_code == 201
+    class_id = classroom.json()["id"]
+    assert classroom.json()["myRole"] == "TEACHER"
+    assert classroom.json()["studentCount"] == 0
+
+    assert client.get(f"/classes/{class_id}", headers=outsider_headers).status_code == 404
+    invite = client.post(f"/classes/{class_id}/members", json={"username": "student"}, headers=teacher_headers)
+    assert invite.status_code == 201
+    assert invite.json()["role"] == "STUDENT"
+    assert invite.json()["status"] == "PENDING"
+
+    listed_for_student = client.get("/classes", headers=student_headers)
+    assert listed_for_student.status_code == 200
+    assert listed_for_student.json()[0]["myStatus"] == "PENDING"
+    assert client.get(f"/classes/{class_id}/assignments", headers=student_headers).status_code == 404
+
+    accepted = client.patch(f"/classes/{class_id}/members/me", json={"status": "ACTIVE"}, headers=student_headers)
+    assert accepted.status_code == 200
+    assert accepted.json()["status"] == "ACTIVE"
+
+    assignment = client.post(
+        f"/classes/{class_id}/assignments",
+        json={"wordbookId": teacher_wordbook["id"], "title": "Day 1"},
+        headers=teacher_headers,
+    )
+    assert assignment.status_code == 201
+    assert assignment.json()["title"] == "Day 1"
+    assert assignment.json()["wordbookId"] == teacher_wordbook["id"]
+
+    assert (
+        client.post(
+            f"/classes/{class_id}/assignments",
+            json={"wordbookId": student_wordbook["id"], "title": "Not mine"},
+            headers=teacher_headers,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.post(
+            f"/classes/{class_id}/assignments",
+            json={"wordbookId": student_wordbook["id"], "title": "Student cannot"},
+            headers=student_headers,
+        ).status_code
+        == 403
+    )
+
+    student_assignments = client.get(f"/classes/{class_id}/assignments", headers=student_headers)
+    assert student_assignments.status_code == 200
+    assert student_assignments.json()[0]["title"] == "Day 1"
+
+    dashboard = client.get(f"/classes/{class_id}/dashboard", headers=teacher_headers)
+    assert dashboard.status_code == 200
+    dashboard_body = dashboard.json()
+    assert dashboard_body["activeStudentCount"] == 1
+    assert dashboard_body["assignmentCount"] == 1
+    assert dashboard_body["assignments"][0]["assignedCount"] == 1
+    assert dashboard_body["assignments"][0]["reviewCount30d"] == 0
+    assert dashboard_body["assignments"][0]["recallRate30d"] == 0
+    assert client.get(f"/classes/{class_id}/dashboard", headers=student_headers).status_code == 403
+    assert client.post(f"/classes/{class_id}/members", json={"username": "class-outsider"}, headers=student_headers).status_code == 403
+
+
 def test_study_mistakes_includes_recent_again_reviews_even_without_lapses(client, auth_headers):
     from app.database import SessionLocal
     from app.models import ReviewState
@@ -343,11 +743,11 @@ def test_study_mistakes_includes_recent_again_reviews_even_without_lapses(client
 
 def test_study_today_samples_old_mastered_cards_with_filters(client, auth_headers):
     from app.database import SessionLocal
-    from app.models import Card, MemoryItem, ReviewState
+    from app.models import Card, ReviewState
 
     wb = client.post("/wordbooks", json={"name": "Mastered"}, headers=auth_headers).json()
-    w1 = client.post(f"/wordbooks/{wb['id']}/words", json={"key": "a", "value": "A"}, headers=auth_headers).json()
-    w2 = client.post(f"/wordbooks/{wb['id']}/words", json={"key": "b", "value": "B"}, headers=auth_headers).json()
+    client.post(f"/wordbooks/{wb['id']}/words", json={"key": "a", "value": "A"}, headers=auth_headers)
+    client.post(f"/wordbooks/{wb['id']}/words", json={"key": "b", "value": "B"}, headers=auth_headers)
 
     today = client.get(f"/study/today?wordbookId={wb['id']}&limit=10", headers=auth_headers).json()
     card_ids = [row["cardId"] for row in today["cards"]]

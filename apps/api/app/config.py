@@ -67,6 +67,11 @@ def get_google_client_id() -> str:
     return os.getenv("GOOGLE_CLIENT_ID", "").strip()
 
 
+def get_scheduler_engine() -> str:
+    configured = os.getenv("SCHEDULER_ENGINE", "simple").strip().lower()
+    return configured if configured in {"simple", "fsrs"} else "simple"
+
+
 def get_cors_origins() -> List[str]:
     configured = os.getenv("CORS_ORIGINS", "")
     origins = [origin.strip() for origin in configured.split(",") if origin.strip()]

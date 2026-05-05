@@ -1076,6 +1076,11 @@ textarea:focus {
   margin: 18px 0;
 }
 
+.profile-stats.long-term-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
 .profile-stats div {
   padding: 18px;
   border: 1px solid #dce1ea;
@@ -1092,6 +1097,27 @@ textarea:focus {
 .profile-stats small,
 .wordbook-item small {
   color: #657084;
+}
+
+.typing-answer-field {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+}
+
+.typing-answer-field span {
+  color: #657084;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.typing-answer-field input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 16px;
 }
 
 .memorized-list {
@@ -1416,6 +1442,10 @@ textarea:focus {
   }
 
   .profile-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-stats.long-term-stats {
     grid-template-columns: 1fr;
   }
 

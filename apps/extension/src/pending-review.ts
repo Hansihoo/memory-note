@@ -1,4 +1,4 @@
-import { StudyPlatform, type QuizMark } from "@memory-note/core";
+import { StudyPlatform, createPendingReviewEvent, type PendingReviewEvent, type QuizMark } from "@memory-note/core";
 import { readChromeLocalStorage } from "./storage";
 import { createReviewClientEventId, ratingFromQuizMark, submitServerReviewWithEvent } from "./api";
 
@@ -7,27 +7,14 @@ const MAX_QUEUE = 200;
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_FLUSH_BATCH = 20;
 
-export interface PendingReviewEvent {
-  cardId: string;
-  rating: ReturnType<typeof ratingFromQuizMark>;
-  platform: StudyPlatform.EXTENSION;
-  clientEventId: string;
-  reviewedAt: string;
-  attemptCount: number;
-  lastAttemptAt: string | null;
-}
-
 export async function enqueuePendingReview(cardId: string, mark: QuizMark): Promise<void> {
   const queue = await loadPendingQueue();
-  queue.push({
+  queue.push(createPendingReviewEvent({
     cardId,
     rating: ratingFromQuizMark(mark),
     platform: StudyPlatform.EXTENSION,
     clientEventId: createReviewClientEventId(cardId, mark),
-    reviewedAt: new Date().toISOString(),
-    attemptCount: 0,
-    lastAttemptAt: null,
-  });
+  }));
   await savePendingQueue(queue);
 }
 

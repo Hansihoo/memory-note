@@ -36,9 +36,9 @@ Stop only if:
 - Mark TODOs complete only after tests pass or limitations are documented.
 
 ## Current Status
-- Completed through: Phase 2
-- Active phase: Phase 4
-- Next task: T4.4 Mistake note 화면 요구사항 확정 필요
+- Completed through: Phase 13
+- Active phase: Phase 14 (blocked)
+- Next task: T14.1 Add products and entitlements — blocked pending billing/access/admin policy
 
 ## Phase 1 — Card-Based Review Engine
 Status: Completed
@@ -119,90 +119,90 @@ TODO:
 - [x] T5.6 Add extension tests.
 
 ## Phase 6 — Long-Term Memory / MASTERED
-Status: Active
+Status: Completed
 
 TODO:
 - [x] T6.1 Apply conservative MASTERED transition.
 - [x] T6.2 Include old MASTERED cards in today queue sampling.
 - [x] T6.3 Move MASTERED card to RELEARNING on AGAIN.
-- [ ] T6.4 Add long-term memory stats.
-- [ ] T6.5 Add tests.
+- [x] T6.4 Add long-term memory stats.
+- [x] T6.5 Add tests.
 
 ## Phase 7 — FSRS Scheduler
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T7.1 Add FSRS scheduler implementation beside SimpleSRS.
-- [ ] T7.2 Add scheduler engine config.
-- [ ] T7.3 Keep SchedulerService interface stable.
-- [ ] T7.4 Treat retrievability as computed value.
-- [ ] T7.5 Add scheduler tests.
+- [x] T7.1 Add FSRS scheduler implementation beside SimpleSRS.
+- [x] T7.2 Add scheduler engine config.
+- [x] T7.3 Keep SchedulerService interface stable.
+- [x] T7.4 Treat retrievability as computed value.
+- [x] T7.5 Add scheduler tests.
 
 ## Phase 8 — Word to Sentence Cards
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T8.1 Add example sentence storage.
-- [ ] T8.2 Generate CLOZE cards from examples.
-- [ ] T8.3 Add TYPING card support.
-- [ ] T8.4 Add web renderers for CLOZE and TYPING.
-- [ ] T8.5 Store responseText for typing reviews.
-- [ ] T8.6 Add tests.
+- [x] T8.1 Add example sentence storage.
+- [x] T8.2 Generate CLOZE cards from examples.
+- [x] T8.3 Add TYPING card support.
+- [x] T8.4 Add web renderers for CLOZE and TYPING.
+- [x] T8.5 Store responseText for typing reviews.
+- [x] T8.6 Add tests.
 
 ## Phase 9 — Markdown v2 / Course Pack
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T9.1 Extend Markdown import for sentence/cloze/tag metadata.
-- [ ] T9.2 Keep Markdown v1 compatible.
-- [ ] T9.3 Add course_pack/unit/lesson structure.
-- [ ] T9.4 Keep course content separate from user review state.
-- [ ] T9.5 Add tests.
+- [x] T9.1 Extend Markdown import for sentence/cloze/tag metadata.
+- [x] T9.2 Keep Markdown v1 compatible.
+- [x] T9.3 Add course_pack/unit/lesson structure.
+- [x] T9.4 Keep course content separate from user review state.
+- [x] T9.5 Add tests.
 
 ## Phase 10 — Core Session Engine / Offline Sync
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T10.1 Add shared session engine to packages/core.
-- [ ] T10.2 Add TodayCard, TodaySummary, ReviewRequest, ReviewResponse types.
-- [ ] T10.3 Add PendingReviewEvent model.
-- [ ] T10.4 Reuse core session logic in web/extension where practical.
-- [ ] T10.5 Add tests.
+- [x] T10.1 Add shared session engine to packages/core.
+- [x] T10.2 Add TodayCard, TodaySummary, ReviewRequest, ReviewResponse types.
+- [x] T10.3 Add PendingReviewEvent model.
+- [x] T10.4 Reuse core session logic in web/extension where practical.
+- [x] T10.5 Add tests.
 
 ## Phase 11 — Fun Events / Retention UX
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T11.1 Add study_events table/model.
-- [ ] T11.2 Generate events after review_state update.
-- [ ] T11.3 Add leech/zombie event logic.
-- [ ] T11.4 Add user setting to disable fun elements.
-- [ ] T11.5 Add tests.
+- [x] T11.1 Add study_events table/model.
+- [x] T11.2 Generate events after review_state update.
+- [x] T11.3 Add leech/zombie event logic.
+- [x] T11.4 Add user setting to disable fun elements.
+- [x] T11.5 Add tests.
 
 ## Phase 12 — Study Groups
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T12.1 Add study_groups.
-- [ ] T12.2 Add study_group_members.
-- [ ] T12.3 Add group wordbook linking.
-- [ ] T12.4 Add group progress summary.
-- [ ] T12.5 Add group weak cards.
-- [ ] T12.6 Add permission tests.
+- [x] T12.1 Add study_groups.
+- [x] T12.2 Add study_group_members.
+- [x] T12.3 Add group wordbook linking.
+- [x] T12.4 Add group progress summary.
+- [x] T12.5 Add group weak cards.
+- [x] T12.6 Add permission tests.
 
 ## Phase 13 — Teacher Classes / Assignments
-Status: Pending
+Status: Completed
 
 TODO:
-- [ ] T13.1 Add classes and class_members.
-- [ ] T13.2 Add teacher/student roles.
-- [ ] T13.3 Add assignments.
-- [ ] T13.4 Add assignment progress.
-- [ ] T13.5 Add teacher dashboard APIs.
-- [ ] T13.6 Add permission tests.
+- [x] T13.1 Add classes and class_members.
+- [x] T13.2 Add teacher/student roles.
+- [x] T13.3 Add assignments.
+- [x] T13.4 Add assignment progress.
+- [x] T13.5 Add teacher dashboard APIs.
+- [x] T13.6 Add permission tests.
 
 ## Phase 14 — Paid Course Content / Entitlements
-Status: Pending
+Status: Blocked
 
 TODO:
 - [ ] T14.1 Add products and entitlements.
@@ -267,3 +267,52 @@ TODO:
 - T6.2 완료: `/study/today` 큐에 장기 MASTERED 샘플링(10%, 최소1) 로직 추가, 최근 7일 복습 MASTERED 제외/wordbook 필터 존중/중복 제거/limit 준수 반영. summary에 optional `masteredCheckCount` 추가.
 - T6.3 완료: `SimpleSRS.review`의 AGAIN 경로가 MASTERED 카드도 RELEARNING으로 전환하고 due+10분, lapses/streak/leech 갱신, mastered_at 유지함을 기존 회귀 테스트로 재검증.
 - 중단: T6.4 long-term memory stats의 구체 지표 정의(기간/분모/표시 위치)가 TASKS에 없어 제품 결정 필요.
+- T6.4 완료: `/profile/summary`에 optional 장기 기억 통계(`longTermReviewCount30d`, `longTermCorrectCount30d`, `longTermRecallRate30d`, `masteredLapseCount30d`, `oldMasteredDueCount`)를 추가하고, `masteredCount`를 active/non-deleted memory_item 기준 distinct count로 정리. 웹 프로필에 장기 기억 통계 섹션을 작게 추가.
+- T6.5 완료: `apps/api/tests/test_api.py::test_profile_summary_long_term_memory_stats`로 distinct mastered memory_item, state_before_json 기반 30일 장기 복습/정답/AGAIN/회상률, old MASTERED 샘플 후보 제외 조건을 검증. 기존 CI 실패 원인이던 Ruff 미사용 import/변수도 정리. `pnpm run ci` 통과.
+- Phase 6 완료: long-term memory / MASTERED 범위 검증 완료 후 Phase 7(FSRS Scheduler)을 Active로 전환.
+- T7.1 완료: `apps/api/app/review.py`에 기존 `SimpleSRS` 옆 `FSRSScheduler`를 추가해 difficulty/stability/retrievability 기반 review 결과를 계산하도록 구현.
+- T7.2 완료: `apps/api/app/config.py::get_scheduler_engine` 및 `apps/api/app/review.py::scheduler_from_config` 추가. 기본값은 `simple`, `SCHEDULER_ENGINE=fsrs`일 때 FSRS 계열 엔진 선택, 잘못된 값은 `simple` fallback.
+- T7.3 완료: `SchedulerService.review(state, rating, reviewed_at)` 인터페이스와 `review_card(..., scheduler=...)` 주입 지점 유지.
+- T7.4 완료: `retrievability`는 DB 컬럼 없이 `calculate_retrievability`에서 `last_reviewed_at`/`stability`로 계산하도록 유지하고 FSRS 안정도 갱신에도 계산값을 사용.
+- T7.5 완료: `apps/api/tests/test_scheduler_policy.py`에 config 선택, FSRS review/AGAIN 동작, computed retrievability 회귀 테스트 추가. `python -m pytest apps/api/tests -q` 및 `pnpm run ci` 통과.
+- Phase 7 완료: FSRS scheduler 범위 검증 완료 후 Phase 8(Word to Sentence Cards)을 Active로 전환.
+- T8.1 완료: Word API/Sync/Markdown에 optional `exampleSentence`를 추가하고 `memory_items.example_sentence` compat migration을 추가.
+- T8.2 완료: 예문이 있는 WORD item에서 `CLOZE` 카드를 자동 생성하고, 예문 제거 시 관리 대상 문장 카드를 비활성화하도록 default card sync 보강.
+- T8.3 완료: 예문 기반 `TYPING` 카드 자동 생성 추가.
+- T8.4 완료: 웹 학습 화면에서 TYPING 카드 입력 필드를 렌더링하고, CLOZE/TYPING 서버 카드를 기존 study session 렌더링으로 표시.
+- T8.5 완료: 웹 review 제출에 `responseText`를 연결하고 API `ReviewLog.response_text` 저장 회귀 테스트 추가.
+- T8.6 완료: API 예문/CLOZE/TYPING/responseText 테스트와 Markdown exampleSentence 테스트 추가. `pnpm run ci` 통과.
+- Phase 8 완료: Word to Sentence Cards 범위 검증 완료 후 Phase 9(Markdown v2 / Course Pack)을 Active로 전환.
+- T9.1 완료: Markdown parser/exporter가 optional `itemType`, `exampleSentence`, `tags`, `cloze` 컬럼을 처리하도록 확장.
+- T9.2 완료: 기존 v1 `key/value/lastViewedAt` Markdown table은 계속 import 가능하도록 유지.
+- T9.3 완료: `CoursePack`, `CourseUnit`, `CourseLesson`, `CourseLessonItem` content-only 모델과 테이블 구조 추가.
+- T9.4 완료: course content 모델에는 `user_id`/review state 연결을 두지 않고, 사용자 review state와 분리된 원본 교재 구조로 유지.
+- T9.5 완료: Markdown v2 parser/exporter 테스트와 course content 분리 테스트 추가. `pnpm run ci` 통과.
+- Phase 9 완료: Markdown v2 / Course Pack 범위 검증 완료 후 Phase 10(Core Session Engine / Offline Sync)을 Active로 전환.
+- T10.1 완료: `packages/core/src/session.ts`에 shared study session engine 추가.
+- T10.2 완료: core에 `TodayCard`, `TodaySummary`, `ReviewRequest`, `ReviewResponse` 타입 추가.
+- T10.3 완료: core에 `PendingReviewEvent` 모델과 `createPendingReviewEvent` 생성 helper 추가.
+- T10.4 완료: web session util이 core session engine/card type mapping을 재사용하고, extension pending review queue가 core pending event 모델을 사용하도록 연결.
+- T10.5 완료: core session tests와 기존 web/extension session/pending tests 통과. `pnpm run ci` 통과.
+- Phase 10 완료: Core Session Engine / Offline Sync 범위 검증 완료 후 Phase 11(Fun Events / Retention UX)을 Active로 전환.
+- T11.1 done: added `StudyEvent` model/table plus migration support for append-only study event logging.
+- T11.2 done: review updates now create study events after review_state changes without mutating review_logs.
+- T11.3 done: retention event rules cover mastered transitions, mastered lapses, leech threshold crossing, and long-term mastered reviews.
+- T11.4 done: added `funEventsEnabled` user setting and `/me/settings` read/update endpoints; disabled users do not create new study events.
+- T11.5 done: added API coverage for event generation and setting opt-out; `pnpm run ci` passed.
+- Phase 11 done: Fun Events / Retention UX validated and Phase 12(Study Groups) activated.
+- T12.1 done: added private `StudyGroup` model/table.
+- T12.2 done: added `StudyGroupMember` with OWNER/MEMBER roles and PENDING/ACTIVE/DECLINED membership states.
+- T12.3 done: added group wordbook linking scoped to the active member's own wordbooks.
+- T12.4 done: added group progress summary over active members' explicitly linked wordbooks.
+- T12.5 done: added group weak-card endpoint limited to the requesting active member's linked cards.
+- T12.6 done: added permission tests for outsider access, pending members, owner-only invites, own-wordbook linking, aggregate progress, and weak-card privacy; `pnpm run ci` passed.
+- Phase 12 done: Study Groups validated and Phase 13(Teacher Classes / Assignments) activated.
+- T13.1 done: added `TeacherClass` and `ClassMember` models/tables.
+- T13.2 done: added TEACHER/STUDENT roles with PENDING/ACTIVE/DECLINED membership states.
+- T13.3 done: added teacher-created class assignments scoped to the teacher's own wordbooks.
+- T13.4 done: added zero-safe assignment progress aggregation from review_logs where matching data exists.
+- T13.5 done: added teacher-only class dashboard API returning aggregate assignment progress.
+- T13.6 done: added permission tests for outsider access, pending students, teacher-only assignment/invite/dashboard actions, and own-wordbook assignment scope; `pnpm run ci` passed.
+- Phase 13 done: Teacher Classes / Assignments validated and Phase 14(Paid Course Content / Entitlements) activated.
+- Blocked at T14.1: Paid products, entitlements, course access, course start, and admin course management affect billing/payment and paid access control. Need explicit product/payment provider, entitlement grant/revoke, refund/rollback, and admin authorization policy before implementation.

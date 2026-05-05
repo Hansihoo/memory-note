@@ -9,6 +9,9 @@ export interface Word {
   key: string;
   value: string;
   itemType?: "WORD" | "QA" | "COMMAND" | "SENTENCE";
+  exampleSentence?: string | null;
+  tags?: string[] | null;
+  cloze?: string | null;
   lastViewedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -56,6 +59,13 @@ export interface ProfileSummary {
   memorizedWordCount: number;
   memorizedWords: MemorizedWordSummary[];
   recentWordbooks: WordbookSummary[];
+  masteredCount: number;
+  weakCardCount: number;
+  longTermReviewCount30d: number;
+  longTermCorrectCount30d: number;
+  longTermRecallRate30d: number;
+  masteredLapseCount30d: number;
+  oldMasteredDueCount: number;
 }
 
 export interface ProgressEvent {
