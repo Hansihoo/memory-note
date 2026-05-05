@@ -154,6 +154,7 @@ class TodayStudySummary(ApiModel):
     new_count: int = Field(alias="newCount")
     weak_count: int = Field(alias="weakCount")
     estimated_minutes: int = Field(alias="estimatedMinutes")
+    mastered_check_count: Optional[int] = Field(None, alias="masteredCheckCount")
 
 
 class TodayStudyCard(ApiModel):
@@ -228,6 +229,8 @@ class ProfileSummary(ApiModel):
     memorized_word_count: int = Field(alias="memorizedWordCount")
     memorized_words: List[MemorizedWordSummary] = Field(alias="memorizedWords")
     recent_wordbooks: List[WordbookStudySummary] = Field(alias="recentWordbooks")
+    mastered_count: Optional[int] = Field(None, alias="masteredCount")
+    weak_card_count: Optional[int] = Field(None, alias="weakCardCount")
 
 
 class MessageResponse(BaseModel):

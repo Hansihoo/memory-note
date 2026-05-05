@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, ClipboardEvent, FormEvent } from "react";
 import { BASIC_REVIEW_RATING_BY_ACTION, StudyPlatform } from "@memory-note/core";
 import { apiClient } from "./api/client";
-import type { ProfileSummary, ReviewRating, UserProfile, Word, Wordbook } from "./types";
+import type { MistakeCard, ProfileSummary, ReviewRating, UserProfile, Word, Wordbook } from "./types";
 import { parseWordMarkdown, serializeWordsToMarkdown } from "./utils/markdown";
 import {
   cardTypeFromDirection,
@@ -522,6 +522,7 @@ function isLegacySampleWordbook(wordbook: Wordbook): boolean {
 
 export function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [mistakeCards, setMistakeCards] = useState<MistakeCard[]>([]);
   const [summary, setSummary] = useState<ProfileSummary>(emptyProfile);
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
@@ -640,17 +641,21 @@ export function App() {
     setSummary(await apiClient.profileSummary());
   }, []);
 
+  const loadMistakes = useCallback(async () => {
+    setMistakeCards(await apiClient.studyMistakes(undefined, 10));
+  }, []);
+
   const loadAfterAuth = useCallback(async () => {
     setLoading(true);
     setAppError("");
     try {
-      await Promise.all([loadWordbooks(), loadSummary()]);
+      await Promise.all([loadWordbooks(), loadSummary(), loadMistakes()]);
     } catch (error) {
       setAppError(error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
-  }, [loadSummary, loadWordbooks]);
+  }, [loadMistakes, loadSummary, loadWordbooks]);
 
   useEffect(() => {
     if (!apiClient.hasToken()) {
@@ -1658,6 +1663,22 @@ export function App() {
                 ))
               ) : (
                 <p className="profile-empty">아직 알고 있음으로 표시한 단어가 없습니다.</p>
+              )}
+            </section>
+            <section className="memorized-list" aria-label="실수 노트">
+              <h2>실수 노트</h2>
+              {mistakeCards.length > 0 ? (
+                mistakeCards.map((card) => (
+                  <article key={card.cardId} className="memorized-item">
+                    <span>
+                      <strong>{card.prompt}</strong>
+                      <small>{card.cardType}</small>
+                    </span>
+                    <em>{card.answer}</em>
+                  </article>
+                ))
+              ) : (
+                <p className="profile-empty">최근 다시 보기 카드가 없습니다.</p>
               )}
             </section>
           </section>

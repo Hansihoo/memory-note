@@ -30,9 +30,11 @@ export class ExtensionAuthMissingError extends Error {
 }
 
 export class ExtensionApiError extends Error {
-  constructor(message: string) {
+  status?: number;
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "ExtensionApiError";
+    this.status = status;
   }
 }
 
@@ -84,7 +86,27 @@ export async function submitServerReview(
   });
 
   if (!response.ok) {
-    throw new ExtensionApiError(`Review request failed with ${response.status}`);
+    throw new ExtensionApiError(`Review request failed with ${response.status}`, response.status);
+  }
+}
+
+export async function submitServerReviewWithEvent(
+  cardId: string,
+  rating: ReviewRating,
+  clientEventId: string,
+  authPromise: Promise<ExtensionAuth | null> = loadExtensionAuth(),
+): Promise<void> {
+  const auth = await authPromise;
+  if (!auth) {
+    throw new ExtensionAuthMissingError();
+  }
+  const response = await fetch(`${auth.apiBaseUrl}/study/cards/${encodeURIComponent(cardId)}/review`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ rating, platform: StudyPlatform.EXTENSION, clientEventId }),
+  });
+  if (!response.ok) {
+    throw new ExtensionApiError(`Review request failed with ${response.status}`, response.status);
   }
 }
 

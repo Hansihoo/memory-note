@@ -66,3 +66,43 @@
 - 개발 반복 루프: `docs/DELIVERY_LOOP.md`
 - 명령 모음: `docs/COMMANDS.md`
 - CI/CD: `docs/CI_CD.md`
+
+## 9. Continuous Coding-Agent Loop
+
+The agent should operate as a continuous implementation loop.
+
+For each TODO:
+1. Implement the smallest required change.
+2. Run targeted validation.
+3. If validation fails, inspect the failure, fix the root cause, and rerun validation.
+4. Continue fixing until validation passes or a hard blocker is found.
+5. Mark the TODO complete only after validation passes.
+6. Add a Work Log entry.
+7. Continue to the next unchecked TODO.
+
+When a phase is complete:
+- Mark it Completed.
+- Activate the next Pending phase.
+- Continue automatically.
+
+Do not stop after a normal test failure. Test failures are part of the development loop.
+
+Stop only for hard blockers:
+- destructive or ambiguous database migration
+- unresolved public API conflict
+- authentication/security decision required
+- payment/business rule decision required
+- ambiguous product decision
+- unresolved legacy compatibility risk
+- required environment/dependency unavailable
+- broad unrelated refactor required
+
+## 10. Ambiguity handling default
+- If a task has minor product ambiguity but a backward-compatible default can be inferred, implement the backward-compatible option and record the decision in `.agent/DECISIONS.md`.
+- Stop only if:
+  - the ambiguity affects data deletion
+  - the ambiguity affects billing/payment
+  - the ambiguity affects authentication/security
+  - the ambiguity changes public API behavior incompatibly
+  - the ambiguity exposes private user data
+

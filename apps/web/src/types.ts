@@ -92,6 +92,8 @@ export interface TodayStudyResponse {
   cards: TodayStudyCard[];
 }
 
+export interface MistakeCard extends TodayStudyCard {}
+
 export interface CardReviewResponse {
   cardId: string;
   memoryItemId: string;

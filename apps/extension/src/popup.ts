@@ -14,6 +14,7 @@ import { loadExtensionAuth } from "./auth";
 import popupStyles from "./popup.css?inline";
 import { loadExtensionSettings, recordMiniQuizShown } from "./settings";
 import { createExtensionSpeechDriver } from "./speech";
+import { enqueuePendingReview, flushPendingReviews } from "./pending-review";
 
 interface MemoryNoteChromeApi {
   runtime?: {
@@ -68,6 +69,7 @@ function renderHome(container: HTMLElement): void {
       setStatus(status, "웹 앱에서 로그인하면 확장 프로그램과 연결됩니다.", true);
     }
   });
+  void flushPendingReviews();
 }
 
 async function startPopupQuiz(
@@ -75,6 +77,7 @@ async function startPopupQuiz(
   status: HTMLElement | null,
 ): Promise<void> {
   setStatus(status, "단어를 불러오는 중입니다.");
+  await flushPendingReviews();
 
   try {
     const settings = await loadExtensionSettings();
@@ -148,7 +151,10 @@ function renderQuiz(
           const mark = action as QuizMark;
           renderQuiz(container, session, session.answer(mark));
           if (currentCardId) {
-            void submitServerReview(currentCardId, mark).catch(() => undefined);
+            void submitServerReview(currentCardId, mark).catch(async () => {
+              await enqueuePendingReview(currentCardId, mark);
+            });
+            void flushPendingReviews();
           }
         }
       });
