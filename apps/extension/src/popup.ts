@@ -43,14 +43,18 @@ if (root) {
 
 function renderHome(container: HTMLElement): void {
   document.body.classList.remove("login-before-popup");
+  document.body.classList.add("start-popup");
   container.innerHTML = `
-    <section class="popup-shell home-shell" aria-labelledby="popup-title">
-      <h1 class="sr-only" id="popup-title">Memory Note Mini Quiz</h1>
-      <div class="home-note">
-        <button class="start-button" type="button" id="start-button">암기 시작</button>
-        <button class="options-button" type="button" id="options-button">설정</button>
+    <section class="popup-shell start-shell" aria-labelledby="popup-title">
+      <div class="start-card">
+        <h1 class="start-title" id="popup-title">Memory Note</h1>
+        <p class="start-status">학습 준비 완료</p>
+        <button class="start-primary" type="button" id="start-button">암기 시작</button>
+        <div class="start-actions">
+          <button class="start-link-button" type="button" id="options-button">설정</button>
+        </div>
+        <p class="start-helper" role="status" id="popup-status">오늘 복습을 바로 시작합니다</p>
       </div>
-      <p class="status-text" role="status" id="popup-status"></p>
     </section>
   `;
 
@@ -73,13 +77,12 @@ function renderHome(container: HTMLElement): void {
       renderLoginRequired(container);
       return;
     }
-
-    setStatus(status, "웹 계정과 연결되어 있습니다.");
   });
   void flushPendingReviews();
 }
 
 function renderLoginRequired(container: HTMLElement): void {
+  document.body.classList.remove("start-popup");
   document.body.classList.add("login-before-popup");
   container.innerHTML = `
     <section class="popup-shell login-shell" aria-labelledby="login-title">
@@ -157,7 +160,7 @@ function renderQuiz(
   session: MiniQuizSession,
   snapshot = session.snapshot(),
 ): void {
-  document.body.classList.remove("login-before-popup");
+  document.body.classList.remove("login-before-popup", "start-popup");
   container.innerHTML = `
     <section class="popup-shell quiz-shell" aria-label="팝업 암기 퀴즈">
       <header class="quiz-header">

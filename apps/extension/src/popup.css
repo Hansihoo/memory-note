@@ -21,6 +21,11 @@ body.login-before-popup {
   background: #f7faf6;
 }
 
+body.start-popup {
+  width: 320px;
+  background: #f7faf6;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -96,6 +101,7 @@ body.login-before-popup {
   color: #9b2d2d;
 }
 
+.start-shell,
 .login-shell {
   min-height: 224px;
   padding: 14px;
@@ -103,6 +109,7 @@ body.login-before-popup {
   background: #f7faf6;
 }
 
+.start-card,
 .login-card {
   box-sizing: border-box;
   display: grid;
@@ -115,6 +122,7 @@ body.login-before-popup {
   box-shadow: 0 16px 34px rgba(31, 41, 51, 0.11);
 }
 
+.start-title,
 .login-title {
   margin: 0;
   color: #1f2933;
@@ -124,6 +132,7 @@ body.login-before-popup {
   letter-spacing: 0;
 }
 
+.start-status,
 .login-status {
   margin: 6px 0 0;
   color: #1f2933;
@@ -132,6 +141,7 @@ body.login-before-popup {
   line-height: 1.35;
 }
 
+.start-primary,
 .login-primary {
   width: 100%;
   min-height: 44px;
@@ -146,10 +156,12 @@ body.login-before-popup {
   font-weight: 850;
 }
 
+.start-primary:hover,
 .login-primary:hover {
   background: #276b4f;
 }
 
+.start-actions,
 .login-actions {
   display: flex;
   align-items: center;
@@ -158,6 +170,11 @@ body.login-before-popup {
   margin-top: 10px;
 }
 
+.start-actions {
+  justify-content: flex-end;
+}
+
+.start-link-button,
 .login-link-button {
   min-height: 30px;
   padding: 0;
@@ -170,15 +187,21 @@ body.login-before-popup {
   font-weight: 760;
 }
 
+.start-link-button:hover,
 .login-link-button:hover {
   color: #235f46;
 }
 
+.start-helper,
 .login-helper {
   margin: 12px 0 0;
   color: #6b7280;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.start-helper.error {
+  color: #9b2d2d;
 }
 
 .quiz-shell {
